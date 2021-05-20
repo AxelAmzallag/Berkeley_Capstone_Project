@@ -4,7 +4,9 @@ This repository contains the code, presentations, and final report for a semeste
 
 ### Quick Reference
 
-The best way to quickly read about the project's process and findings is the Final_Report.pdf file () in the main directory. The main analysis and conclusions are all described in some detail in this file.
+The best way to quickly read about the project's process and findings is the _Final_Report.pdf_ file (https://github.com/AxelAmzallag/Berkeley_Capstone_Project/blob/main/Final_Report.pdf) in the main directory. The main analysis and conclusions are all described in some detail in this file. 
+
+A short PowerPoint summarizing the basics of the project is in the  findings can be found in the 
 
 ### Directory Structure
 
