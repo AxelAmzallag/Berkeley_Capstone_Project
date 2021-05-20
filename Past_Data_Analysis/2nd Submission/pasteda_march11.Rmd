@@ -1,0 +1,146 @@
+---
+title: "past eda"
+author: "BESTARGOSgroup"
+output: pdf_document
+---
+
+```{r setup, include=TRUE, message = FALSE}
+library(tidyverse)
+library(furrr)
+library(sp)
+library(raster)
+library(ncdf4)
+library(lubridate)
+library(lobstr)
+```
+
+
+
+```{r}
+# read in df
+huge <- read.csv(file = "../../Full_Data_Initial_Clean/2019_Covariates_Japan_Area.csv")
+
+# take away NA
+covariatesDF <- na.omit(huge)
+
+
+# FIX THE DATES EVENTUALLY
+
+# select columns we need ( a single buoy)
+
+varsNeeded <- covariatesDF %>% dplyr::select(PLATFORM_NUMBER, LONGITUDE, LATITUDE, TEMP_ADJUSTED, PRES_ADJUSTED )
+
+# Filter to a single buoy, with a specific longitude and get rid of pressures less
+# than 1 (near the surface)
+
+oneBuoy  <- varsNeeded %>% filter(PLATFORM_NUMBER == 2902748)
+
+oneLat <- oneBuoy  %>% filter(LONGITUDE == 151.870) %>% filter(PRES_ADJUSTED > 1 )
+
+# Plot it
+
+oneLat %>% ggplot(aes(y= -PRES_ADJUSTED,x= TEMP_ADJUSTED))+
+  geom_point()
+
+
+
+
+# A different buoy 
+
+oneLat <- oneBuoy  %>% filter(LONGITUDE == 151.874)
+
+# plot it 
+
+oneLat%>% ggplot(aes(y= -PRES_ADJUSTED,x= TEMP_ADJUSTED))+
+  geom_point() 
+
+# approaches to checking thermocline 
+
+# fitting models to some data points (OLS) and seeing changes
+
+# crude check of average differences
+
+oneLat$TEMP_ADJUSTED
+
+# a while loop to find the rough i, where the average temperature changes 
+# drastically from the first average
+
+i <- 1
+diff <- 0
+first <- mean(oneLat$TEMP_ADJUSTED[1:(10)])
+while(diff < 0.1){
+  second <- mean(oneLat$TEMP_ADJUSTED[(i):(i+9)])
+  diff <- abs(second-first)
+  i <- i + 5
+}
+
+
+# one line method of while loop
+
+sapply(split(oneLat$TEMP_ADJUSTED, ceiling(seq_along(oneLat$TEMP_ADJUSTED) / 5)), mean)
+
+
+
+
+```
+
+
+```{r}
+# filter to between 1 and 5 dbars
+
+regVars <- varsNeeded %>% filter(PRES_ADJUSTED < 5 & PRES_ADJUSTED > 1) %>% group_by(LONGITUDE,LATITUDE) %>% summarise(meantemp =mean(TEMP_ADJUSTED))
+
+# Regression temp on longitude
+
+myFit <- lm(meantemp ~ LONGITUDE , data= regVars)
+summary(myFit)
+
+regVars %>% ggplot(aes(x= LONGITUDE, y = meantemp))+
+  geom_point()+
+  geom_smooth(method = "lm")
+
+# regression temp on latitude
+
+myFit2 <- lm(meantemp ~ (LATITUDE) , data= regVars)
+summary(myFit2)
+
+regVars %>% ggplot(aes(x= LATITUDE, y = meantemp))+
+  geom_point()+
+  geom_smooth(method = "lm")
+
+
+```
+
+
+```{r}
+
+# thermocline function
+
+getThermoclineBeginning <- function(tempVec){
+  i <- 1
+  diff <- 0
+  first <- mean(tempVec[1:10])
+  
+  while(diff < 0.05){
+    second <- mean(tempVec[(i):(i+2)])
+    diff <- abs(second-first)
+    i <- i + 3
+  }
+  i
+}
+
+# trying to do the same lm as before but we filter with above function
+
+
+regVars <- varsNeeded %>% group_by(LONGITUDE, LATITUDE) %>% 
+           filter( n() > 100 ) %>% summarise(indexTherm = getThermoclineBeginning(TEMP_ADJUSTED)) %>%
+           pull( indexTherm )
+
+head( regVars )
+
+single_obs %>% ggplot( aes( x=TEMP_ADJUSTED , y=-PRES_ADJUSTED) ) + geom_point()
+
+```
+
+
+

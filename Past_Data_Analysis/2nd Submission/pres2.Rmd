@@ -1,0 +1,773 @@
+---
+title: "Pres 2"
+author: "Axel Amzallag, Joshua Hug & Tim Kalnins"
+date: "4/3/2021"
+output: pdf_document
+---
+
+
+All the data in this file should run as long as the folders are kept intact,
+and that the directory that this file is located in is the working directory.
+
+```{r Loading Libraries , echo=FALSE , message=FALSE , eval=TRUE}
+library(ggplot2) # plotting
+library(magrittr) # pipes
+library(lubridate) # data manipulation
+library(dplyr) # data frame cleaning
+library(lobstr) # object size
+library(data.table) # data frame manipulation
+library(pastecs) # space time ecological time series
+library(mgcv) # generalized additive models
+library(gamm4) # mixed model gams with lme4 fitting
+library(ggmap) # heat map
+library(RColorBrewer) # heat map
+```
+
+```{r Thermocline Depth and Surface Temperature}
+##
+## Useful buoys -- Deep enough to use the variable representative isotherm 
+## formula (> 400 meters) and should also have surface temperature values.
+## 
+## For the variable isotherm formula, the equation is as follows:
+## 
+##  TT = T(MLD) – 0.25[T(MLD) – T(400m)]
+##
+## TT -- Thermocline Temperature
+## T(MLD) -- Temperature at the base of the mixed layer
+## T(400m) -- Temperature at 400 meters
+## 
+## For T(MLD), we use surface temperature minus 0.8. Surface temperature is
+## calculated as the mean of the temperature from 10 to 30 meters deep.
+##
+## See Fiedler 2010, pg. 319, for more details. Link below:
+## https://aslopubs.onlinelibrary.wiley.com/doi/pdfdirect/10.4319/lom.2010.8.313
+## 
+getThermDepth <- function(all_buoys_no_date){
+    
+  deepBuoys <- all_buoys_no_date %>% 
+    filter(PRES_ADJUSTED > 400 & TEMP_ADJUSTED < 35) %>%
+                 group_by(PLATFORM_NUMBER , LONGITUDE , LATITUDE) %>%
+                 summarise( TEMP_DEEP = max(TEMP_ADJUSTED ) )
+  
+  surfaceBuoys <- all_buoys_no_date %>%
+    filter(PRES_ADJUSTED < 30 & PRES_ADJUSTED > 10) %>%
+                  group_by(PLATFORM_NUMBER , LONGITUDE , LATITUDE) %>%
+                  summarise( SURFACE_TEMP = mean(TEMP_ADJUSTED) )
+  
+  usefulBuoys <- inner_join( deepBuoys , surfaceBuoys )
+  
+  usefulBuoys$TEMP_MLD <- usefulBuoys$SURFACE_TEMP - 0.8
+  
+  usefulBuoys$TEMP_THERMOCLINE <- usefulBuoys$TEMP_MLD - 0.25 * 
+    ( usefulBuoys$TEMP_MLD - usefulBuoys$TEMP_DEEP )
+  
+  usefulBuoys$THERMOCLINE_DEPTH <- NA
+
+  
+    
+  ## This for() loop adds the THERMOCLINE_DEPTH to each entry using the value
+  ## immediately below the thermocline level.
+  ##
+  ## ~ 1-2% of the data is quite strange here: These data points tend to be at
+  ## high latitudes with low surface temperatures.
+  ##
+  ## Also, this code is slow, even though it runs.
+  for(i in 1:nrow(usefulBuoys)){
+    single_working_buoy <- all_buoys_no_date %>%
+                           filter( PLATFORM_NUMBER == 
+                                     usefulBuoys$PLATFORM_NUMBER[i] &
+                                   LONGITUDE == usefulBuoys$LONGITUDE[i] &
+                                   LATITUDE == usefulBuoys$LATITUDE[i] )
+    
+    dist_to_thermocline <- abs( single_working_buoy$TEMP_ADJUSTED - 
+                                  usefulBuoys$TEMP_THERMOCLINE[i] )
+    temp_sorting_value <- sort( dist_to_thermocline )[7]
+    
+    rows_near_therm <- single_working_buoy[ dist_to_thermocline <
+                                              temp_sorting_value , ]
+    
+    usefulBuoys$THERMOCLINE_DEPTH[i] <- min( rows_near_therm$PRES_ADJUSTED )
+    
+  }
+    
+return(usefulBuoys)
+}
+```
+
+
+```{r Loading the Data , message=FALSE , cache=TRUE}
+
+# read in all the files 
+aug2010_full <-read.csv("../../august/2010_08_Covariates_Pacific.csv")
+
+# remove NA
+aug2010_full <- na.omit(aug2010_full)
+
+# select columns we need
+aug2010_subset <- aug2010_full %>% dplyr::select(PLATFORM_NUMBER,
+                                                 LONGITUDE, LATITUDE,
+                                                 TEMP_ADJUSTED, PRES_ADJUSTED, 
+                                                 PSAL_ADJUSTED)
+
+aug2010_subset %<>% dplyr::filter(PRES_ADJUSTED > 10)
+
+# get thermocline depth vector and attach it 
+
+thermdepth <- getThermDepth(aug2010_subset)
+
+```
+
+\newpage
+
+```{r Example Buoys and Plots}
+## Example 1 -- Median Buoy of August 2010 ##
+test_buoy <- aug2010_subset %>% filter( PLATFORM_NUMBER == 5901537 &
+                                        LONGITUDE == 153.830 &
+                                        LATITUDE == 26.253 )
+
+test_buoy %>% ggplot( aes( x=PRES_ADJUSTED , y=TEMP_ADJUSTED ) ) +
+              geom_point()+ geom_vline(xintercept = 53.7) +
+              xlab("Depth (meters)") + ylab("Temperature (Degrees C)") +
+              ggtitle("Example 1 -- Median Buoy of 2010")
+
+```
+
+\newpage
+
+```{r}
+## Example 2 -- Bad Buoy Outside of Credible Range ##
+test_buoy <- aug2010_subset %>% filter( PLATFORM_NUMBER == 4900806 &
+                                        LONGITUDE == 177.278 &
+                                        LATITUDE == 57.794 )
+
+test_buoy %>% ggplot( aes( x=PRES_ADJUSTED , y=TEMP_ADJUSTED ) ) +
+              geom_point()+ geom_vline(xintercept = 383.600) +
+              xlab("Depth (meters)") + ylab("Temperature (Degrees C)") +
+              ggtitle("Example 2 -- Bad Buoy Outside of Credible Range")
+```
+
+\newpage
+
+```{r}
+## Example 3 -- Buoy with Deep Thermocline ##
+test_buoy <- aug2010_subset %>% filter( PLATFORM_NUMBER == 5901922 &
+                                        LONGITUDE == 151.980 &
+                                        LATITUDE == 12.277 )
+
+test_buoy %>% ggplot( aes( x=PRES_ADJUSTED , y=TEMP_ADJUSTED ) ) +
+              geom_point()+ geom_vline(xintercept = 154.5) +
+              xlab("Depth (meters)") + ylab("Temperature (Degrees C)") +
+              ggtitle("Example 3 -- Buoy with Deep Thermocline")
+```
+
+
+In order to get a better look at the thermocline depth data as a whole, we can look as some summary statistics, a histogram, and a boxplot for it. What jumps out at us the most is that the mean is much higher than the median, signifying that there could be outliers in the data. The histogram also has this pattern, with a few values much larger than the rest. It is highly likely that these values are not real thermoclines because they are taken at points where the latitude is not conducive to the variable representative isotherm calculation. The buoy from example 2 above, for instance, is one of the values on the tail. The boxplot also identifies these points as outliers. If we subset the data to points where our thermocline calculation is valid, we should be able to clean up most, if not all, of these outliers:
+
+```{r Summary Stats Histogram and Boxplot}
+## Summary Statistics and Histogram of Thermocline Depths
+sum_stats <- stat.desc(thermdepth$THERMOCLINE_DEPTH)
+sum_stats[4:13]
+
+```
+
+\newpage
+
+```{r echo=FALSE,eval=TRUE, fig.align='center' , fig.height= 4.25}
+## Histogram of the thermocline data
+hist(thermdepth$THERMOCLINE_DEPTH , main="Histogram of Thermocline Depths" , 
+     xlab = "Thermocline Depth (meters)" , breaks = 100)
+
+## Boxplot of the thermocline data
+boxplot( thermdepth$THERMOCLINE_DEPTH ,
+         xlab = "Thermocline Depth (meters)" ,
+         horizontal = TRUE )
+title("Boxplot of Thermocline Depths")
+```
+
+## Further Data Wrangling and Observation Criterions
+A problem that we are still struggling with is determining the quality of a given observation.
+While the ARGOs data does contain quality control labeling, from our experience, the accuracy
+of such labeling leaves much to be desired. It is not too uncommon to find partially incomplete (in the 
+sense that there is an uneven number of readings per obersavtion, e.g. uneven temperature and 
+salinity readings for instance), large gaps within a given observation (as the float ascends, 
+in some rare cases, readings cease to be recorded at certain pressure levels), 
+or simply bizarre geospatial readings (two specitic types of float, the APEX and Navis, 
+have faulty gps units that lead to erroneous latitude and longitude readings). As such, we need 
+to develop a criterion to filter out these aforementioned observations. Thankfully one of the mean field
+papers lays out a rough outline for observation filtering, which we will implement and apply
+to our data. While not directly related to the topic of model fitting, our plans for further data 
+cleaning should aid in future model fitting and refinement.
+
+
+# Correlation and basic relationship between thermocline and surface temperature
+
+```{r Surface Temperature and Thermocline Depth Relationship}
+
+thermdepth %>% filter(THERMOCLINE_DEPTH < 250) %>%  
+  ggplot(aes(x = SURFACE_TEMP, y = THERMOCLINE_DEPTH))+
+  geom_point()+
+  labs(x="surface temperature", y= "thermocline depth",
+       title= "plot of thermocline depth vs surface temperature")
+
+
+cor.test(thermdepth$SURFACE_TEMP,thermdepth$THERMOCLINE_DEPTH)
+```
+
+There is some correlation however the relationship looks far from linear, we can include 
+SURFACE_TEMP as a predictor in our current model for thermoclines. We will see later 
+that this actually does not seem to improve our predictions when entering this variable 
+in the model.
+
+
+\newpage
+
+
+# Heat Map
+
+```{r Heat Map}
+
+world <- get_map(location=c(left = 120, right = 180, bottom = 0, top = 60), 
+                 source="osm", color="bw", crop=TRUE)
+
+heatmapdat <- thermdepth %>% ungroup() %>%  select(LONGITUDE,
+                                                   LATITUDE,
+                                                   SURFACE_TEMP,
+                                                   THERMOCLINE_DEPTH) 
+
+
+q1 <- ggmap(world) +
+    stat_summary_2d(data = heatmapdat, aes(x = LONGITUDE, y = LATITUDE, 
+        z = SURFACE_TEMP), fun = mean, alpha = 0.6, bins = 30) +
+    scale_fill_continuous(name = "Surface Temp", low = "cyan1",
+                          high = "indianred1")+
+  geom_point(data= heatmapdat[sample(1:nrow(heatmapdat),100,
+                                     replace =FALSE),],
+             aes(x = LONGITUDE, y = LATITUDE, alpha = 0.3)) +
+  labs(title = "Surface temperature heat map")
+
+
+set.seed(15)
+q1 <- ggmap(world) +
+    stat_summary_2d(data = heatmapdat, aes(x = LONGITUDE, y = LATITUDE, 
+        z = THERMOCLINE_DEPTH), fun = mean, alpha = 0.6, bins = 30) +
+    scale_fill_continuous(name = "Thermocline Depth", low = "cyan1",
+                          high = "indianred1") +
+  labs(title = "Thermocline Depth heat\n map")
+
+
+
+# PLOT THE HEAT MAP THE GAM MAKES (run the two chunks that make the GAM first)
+
+heatmapdatm <- cbind(heatmapdat,month = "aug")
+predicthm <- predict.bam(fitThermDepthmlm4, newdata =heatmapdatm)
+heatmapdatpred <- cbind(heatmapdat,predicted=predicthm^2)
+
+
+set.seed(15)
+q2 <- ggmap(world) +
+    stat_summary_2d(data = heatmapdatpred, aes(x = LONGITUDE, y = LATITUDE, 
+        z = predicted), fun = mean, alpha = 0.6, bins = 30) +
+    scale_fill_continuous(name = "Thermocline Depth", low = "cyan1",
+                          high = "indianred1") +
+  labs(title = "Thermocline Depth heat\n map as predicted\n by GAM")
+
+```
+
+
+
+# Heat map with typhoon data
+
+```{r}
+# import typhoon data
+
+
+typh <- readr::read_csv("../../../bestARGOsProject/typhoon_data/bwp_2019/2019_typh_data.csv")
+
+typh$yr_cyc_num <- gsub(pattern = ",",replacement = "",
+                        x = typh$yr_cyc_num)
+typh$mslp <- as.numeric(gsub(pattern = ",",replacement = "",
+                             x = typh$mslp))
+
+# NEED TO REPLACE with NEGATIVE SIGNS FOR W/S
+
+typh$lat <- as.numeric(gsub(pattern = "(N,|S,)",replacement = "",
+                            x = typh$lat))/10
+typh$long <- as.integer(gsub(pattern = "(E,|W,)",replacement = "",
+                             x = typh$long))/10
+
+
+# plot the heat map with the typhoon paths over
+
+
+ggmap(world) +
+    stat_summary_2d(data = heatmapdat, aes(x = LONGITUDE, y = LATITUDE, 
+        z = THERMOCLINE_DEPTH), fun = mean, alpha = 0.6, bins = 30) +
+    scale_fill_continuous(name = "Surface Temp", low = "cyan1", 
+                          high = "indianred1")+
+  geom_point(data= typh,aes(x = long, y = lat, alpha = 0.3,colour=yr_cyc_num, 
+                            stroke = 0))+theme(legend.position="none") +
+  labs(title= "Heat map of thermocline depth\noverlayed with paths of typhoons")
+
+# the same but plot only the beginning of each typhoon
+
+begtyph <- typh %>%
+  group_by(yr_cyc_num) %>%
+  arrange(date_time,.by_group = TRUE) %>%
+  filter(row_number()==c(1:3))
+
+
+
+q3 <- ggmap(world) +
+    stat_summary_2d(data = heatmapdatpred, aes(x = LONGITUDE, y = LATITUDE, 
+        z = predicted), fun = mean, alpha = 0.6, bins = 30) +
+    scale_fill_continuous(name = "Thermocline Depth", low = "cyan1", 
+                          high = "indianred1")+
+  geom_point(data= begtyph,aes(x = long, y = lat, 
+                            stroke = 0), alpha = 1,show.legend = F ) +
+  labs(title= " GAM predicted\n thermocline depth\noverlayed with\n paths of typhoons")
+
+grid.arrange(q1+ theme(legend.position = "none"),q2+ theme(legend.position = "none"),q3+ theme(legend.position = "none"),ncol=3)
+```
+
+
+
+
+From here it appears that typhoons do appear to begin in areas with higher thermocline depth. 
+
+# Models for thermocline depth
+
+Since we only have finite buoy data, and not nearly at every longitude and latitude, we initially model 
+the thermocline depth that can be predicted from a latitude and longitude value. We use a generalized additive model for this. We fit two models here the first is a gam that simply combines all the data from any given month, and so 
+we fit a model for each month. The second is a multilevel model where we model the levels as months where the data 
+was collected therefore we only fit one model and are able to pool our data together. This method can also 
+be used to generally model the thermocline, rather than simply predicting the thermocline depth.
+
+The first will fit a specific model August Thermocline Depth.
+
+```{r Model 1 Examples , message=FALSE, cache = TRUE}
+# get file names
+files <- fs::dir_ls(path = "../../../august/")[1:3]
+
+# read in all the files 
+
+multipleaug <- 
+  do.call(rbind,
+          lapply(files, read.csv))
+
+# remove NA
+fulldata <- na.omit(multipleaug)
+
+# select columns we need
+colsneed <- fulldata %>% dplyr::select(PLATFORM_NUMBER,
+                                          LONGITUDE,
+                                          LATITUDE,
+                                          TEMP_ADJUSTED,
+                                          PRES_ADJUSTED ,
+                                          PSAL_ADJUSTED)
+
+colsneed %<>% dplyr::filter(PRES_ADJUSTED > 15)
+
+# get thermocline depth vector and attach it 
+
+thermdepthaug <- getThermDepth(colsneed)
+
+# first we fit a model with just latitude and longitude
+
+fitThermDepth1 <- bam(formula = THERMOCLINE_DEPTH ~ s(LONGITUDE,LATITUDE),
+                      data = thermdepthaug)
+
+summary(fitThermDepth1)
+
+# next we fit a model with latitude longitude and surface temperature
+
+fitThermDepth2 <- bam(formula = THERMOCLINE_DEPTH~ s(LONGITUDE,LATITUDE)+
+                        s(SURFACE_TEMP, bs = "cs"), data = thermdepthaug)
+
+summary(fitThermDepth2)
+
+gam.check(fitThermDepth2)
+# check the mean absolute error from predicting from a different year month 
+# of august
+
+testdata <- read.csv(file = "../../../august/2012_08_Covariates_Pacific.csv")
+
+# remove NA
+testdata <- na.omit(testdata)
+
+# select columns we need
+testdata <- testdata %>% dplyr::select(PLATFORM_NUMBER,
+                                          LONGITUDE,
+                                          LATITUDE,
+                                          TEMP_ADJUSTED,
+                                          PRES_ADJUSTED )
+
+testdata %<>% dplyr::filter(PRES_ADJUSTED > 15)
+
+
+# compare the root mean squared error on new data
+
+testdatatherm <- getThermDepth(testdata)
+
+
+predict1 <- predict.bam(fitThermDepth1,newdata = testdatatherm)
+predict2 <- predict.bam(fitThermDepth2, newdata =testdatatherm)
+
+sqrt(mean((predict1 - testdatatherm$THERMOCLINE_DEPTH)^2))
+sqrt(mean((predict2 - testdatatherm$THERMOCLINE_DEPTH)^2))
+
+```
+
+
+The second will be a model of multiple months combined together in a multilevel sense.
+
+
+```{r Fit MLM, cache = TRUE}
+# import data from multiple months of same year for instance.
+
+datjul <- read.csv(file ="../../../mixmonths/2010_07_Covariates_Pacific.csv")
+dataug <-  read.csv(file ="../../../august/2011_08_Covariates_Pacific.csv")
+datsep <-  read.csv(file ="../../../mixmonths/2010_09_Covariates_Pacific.csv")
+
+
+# label with the Month 
+
+datjul <- cbind(datjul,month = "jul")
+dataug <- cbind(dataug, month = "aug")
+datsep <- cbind(datsep, month = "sep")
+
+dattog <- rbind(datjul,dataug,datsep)
+
+dattog$month <- as.factor(dattog$month)
+
+dattog <- na.omit(dattog)
+
+thermdepthmlm <- getThermDepth(dattog)
+
+monthsonly <- dattog %>% select(PLATFORM_NUMBER,LONGITUDE, LATITUDE, month)
+
+thermdepthmlmwm <- distinct(inner_join(thermdepthmlm,monthsonly, by = 
+                                c("PLATFORM_NUMBER","LONGITUDE","LATITUDE")))
+
+thermdepthmlmwm <- thermdepthmlmwm %>% filter(THERMOCLINE_DEPTH != 0)
+
+
+fitThermDepthmlm1 <- bam(formula = THERMOCLINE_DEPTH ~ s(LONGITUDE,LATITUDE)+
+                          s(LATITUDE, month, bs = "re")+s(month, bs='re'),
+                         data = thermdepthmlmwm)
+
+summary(fitThermDepthmlm1)
+
+
+
+fitThermDepthmlm2 <- bam(formula = sqrt(THERMOCLINE_DEPTH) ~ ti(LONGITUDE,LATITUDE)+s(LATITUDE,bs= "gp")+
+                          s(LATITUDE, month, bs = "re")+s(month, bs='re')+
+                        s(SURFACE_TEMP, month, bs = "re"),
+                        data = thermdepthmlmwm)
+fitThermDepthmlm3 <- bam(formula = (THERMOCLINE_DEPTH) ~ ti(LONGITUDE,LATITUDE)+s(LATITUDE,bs= "gp")+
+                          s(LATITUDE, month, bs = "re")+s(month, bs='re')+
+                        s(SURFACE_TEMP, month, bs = "re"),
+                        data = thermdepthmlmwm)
+
+# use the sos smooth rather!
+fitThermDepthmlm4 <- bam(formula = sqrt(THERMOCLINE_DEPTH) ~ s(LATITUDE,LONGITUDE, bs="sos")+s(LATITUDE, bs = "gp")+
+                          s(LATITUDE, month, bs = "re")+s(month, bs='re')+
+                        s(SURFACE_TEMP, month, bs = "re"),
+                        data = thermdepthmlmwm)
+fitThermDepthmlm5 <- bam(formula = sqrt(THERMOCLINE_DEPTH) ~ s(LATITUDE,LONGITUDE, bs="sos")+
+                          s(LATITUDE, month, bs = "re")+s(month, bs='re')+
+                        s(SURFACE_TEMP, month, bs = "re"),
+                        data = thermdepthmlmwm)
+summary(fitThermDepthmlm4)
+summary(fitThermDepthmlm5)
+gam.check(fitThermDepthmlm)
+
+AIC(fitThermDepthmlm4,fitThermDepthmlm5)
+
+# test set results
+
+testDataThermMlm <- cbind(testdatatherm,month = "aug")
+testDataThermMlm$month <- as.factor(testDataThermMlm$month)
+
+
+predictM1 <- predict.bam(fitThermDepthmlm1,newdata = testDataThermMlm)
+predictM2 <- predict.bam(fitThermDepthmlm2, newdata =testDataThermMlm)
+
+sqrt(mean((predictM1 - testDataThermMlm$THERMOCLINE_DEPTH)^2))
+sqrt(mean((predictM2^2 - testDataThermMlm$THERMOCLINE_DEPTH)^2))
+
+
+
+```
+
+```{r fit thermocline directly}
+
+fitthermdirect <- bam(TEMP_ADJUSTED ~ ti(LONGITUDE,LATITUDE)+s(LATITUDE,bs= "gp")+
+                          s(LATITUDE, month, bs = "re")+s(month, bs='re')+s(PRES_ADJUSTED),data =
+                        dattog)
+
+# predict an entire thermocline
+
+test_buoy <- aug2010_subset %>% filter( PLATFORM_NUMBER == 5901537 &
+                                        LONGITUDE == 153.830 &
+                                        LATITUDE == 26.253 )
+
+test_buoy <- cbind(test_buoy, month = "aug")
+
+library(gridExtra)
+
+p1 <- test_buoy %>% ggplot( aes( x=PRES_ADJUSTED , y=TEMP_ADJUSTED ) ) +
+              geom_point()+ geom_vline(xintercept = 53.7) +
+              xlab("Depth (meters)") + ylab("Temperature (Degrees C)") +
+              ggtitle("True Buoy Thermocline")+
+geom_text(mapping=aes(x=53.7, y=0,label = "53.7"), size=3, angle=90, vjust=-0.4, hjust=0) 
+
+#test_buoy2 <- cbind(test_buoy, TEMP_PRED =predict.bam(fitthermdirect,test_buoy))
+
+
+p2 <- test_buoy2 %>% ggplot( aes( x=PRES_ADJUSTED , y=TEMP_PRED ) ) +
+              geom_point()+ geom_vline(xintercept = 83.8,show.legend = T) +
+              xlab("Depth (meters)") + ylab("Predicted Temperature (Degrees C)") +
+              ggtitle("GAM predicted Buoy Thermocline") +
+geom_text(mapping=aes(x=83.8, y=0,label = "83.8"), size=3, angle=90, vjust=-0.4, hjust=0) 
+
+grid.arrange(p1,p2, ncol = 2)
+
+
+
+```
+
+
+The multilevel models appear to perform better, and the models with surface 
+temperature also appear to perform marginally better, since 
+they are the simpler model we would most likely remove using the temperature 
+as a potential predictor. The root mean squared error is around 20 which may be concerning
+we have a lot more data and potentially more predictors to add to improve the model.
+
+# Second Model to related to typhoons
+
+The second model takes in output from the first model (the thermocline depth) at any specified latitude and longitude 
+and demonstrates the relationship between this and typhoon occurrence in an area. To do this we plan on taking an average of predicted thermocline depth in some region and then modeling that with respect to the number of typhoons that occured in that region.
+
+# BINNING AND CORRELATIONS
+
+```{r}
+# 1. Make the bins
+# 2. Put them in a list
+# 3. Count typhoons in each bin
+# 4. Thermocline depth in the centre (maybe mean would be better)
+
+# 120, 180
+# 0, 60
+
+
+# 1  2 and 4
+
+binwidth <- 5
+
+lat <- seq(from = 2.5, to = 37.5, by = binwidth)
+long <- seq(from = 122.5, to = 177.5, by =binwidth)
+
+
+grid <- expand.grid(long, lat)
+
+colnames(grid) <- c("LONGITUDE", "LATITUDE")
+
+predictgrid <- predict.bam(fitThermDepth1,newdata = grid)
+
+withpred <- cbind(grid,predictgrid)
+
+
+
+# 3.
+
+world <- get_map(location=c(left = 120, right = 180, bottom = 0, top = 60), 
+                 source="osm", color="bw", crop=TRUE)
+
+q2 <- ggmap(world) +
+    stat_summary_2d(data = withpred, aes(x = LONGITUDE, y = LATITUDE, 
+        z = predictgrid), fun = mean, alpha = 0.6, bins = 30) +
+    scale_fill_continuous(name = "Thermocline Depth", low = "cyan1",
+                          high = "indianred1") +
+  labs(title = "Thermocline Depth heat\n map as predicted\n by GAM")
+
+q2
+
+library(raster)
+
+
+btyph <- typh %>%
+  group_by(yr_cyc_num) %>%
+  arrange(date_time,.by_group = TRUE) %>%
+  filter(row_number()==c(1:3))
+
+
+
+final <- rep(0, 96)
+
+for (i in 1:dim(withpred)[1]){
+  lattrue <- (btyph$lat < withpred$LATITUDE[i] + binwidth/2) & (btyph$lat > withpred$LATITUDE[i] - binwidth/2)
+  longtrue <- (btyph$long < withpred$LONGITUDE[i] + binwidth/2) & (btyph$long > withpred$LONGITUDE[i] - binwidth/2)
+  bothtrue <- lattrue & longtrue
+  final[i] <- sum(bothtrue)
+}
+
+withtyph <- cbind(withpred,typhcount = final)
+
+
+summary(lm(withtyph$typhcount~withtyph$predictgrid))
+
+
+
+withtyph %>% ggplot(aes(x=predictgrid, y= typhcount))+
+  geom_point()+
+  geom_smooth(method = "lm")
+
+
+library(pscl)
+library(MASS)
+library(boot)
+
+m1 <- zeroinfl(typhcount ~ predictgrid,
+  data = withtyph, dist = "negbin")
+summary(m1)
+
+m1 <- glm(formula = typhcount ~ predictgrid, family = "poisson", data = withtyph)
+
+summary(m1)
+```
+
+Try to do salinity and do the same thing
+
+```{r}
+
+# THIS IS THE SAME CODE AS ABOVE BUT FOR SURFACE SALINITY
+# in order to compare to thermocline depth
+
+fitsal <- bam(formula = SURFACE_SAL ~ s(LONGITUDE,LATITUDE),
+                      data = thermdepthaug)
+
+
+# 1  2 and 4
+
+binwidth <- 5
+
+lat <- seq(from = 2.5, to = 37.5, by = binwidth)
+long <- seq(from = 122.5, to = 177.5, by =binwidth)
+
+
+grid <- expand.grid(long, lat)
+
+colnames(grid) <- c("LONGITUDE", "LATITUDE")
+
+predictgrid <- predict.bam(fitsal,newdata = grid)
+
+withpred <- cbind(grid,predictgrid)
+withpred
+
+
+
+# 3.
+
+
+
+
+
+btyph <- typh %>%
+  group_by(yr_cyc_num) %>%
+  arrange(date_time,.by_group = TRUE) %>%
+  filter(row_number()==c(1:3))
+
+
+
+final <- rep(0, 96)
+
+for (i in 1:dim(withpred)[1]){
+  lattrue <- (btyph$lat < withpred$LATITUDE[i] + binwidth/2) & (btyph$lat > withpred$LATITUDE[i] - binwidth/2)
+  longtrue <- (btyph$long < withpred$LONGITUDE[i] + binwidth/2) & (btyph$long > withpred$LONGITUDE[i] - binwidth/2)
+  bothtrue <- lattrue & longtrue
+  final[i] <- sum(bothtrue)
+}
+
+withtyph <- cbind(withpred,typhcount = final)
+
+summary(lm(withtyph$typhcount~withtyph$predictgrid))
+
+withtyph %>% ggplot(aes(x=predictgrid, y= typhcount))+
+  geom_point()+
+  geom_smooth(method = "lm")
+
+
+
+```
+
+
+
+```{r}
+library(raster)
+
+binwidth <- 5
+
+lat <- seq(from = 0, to = 40, by = binwidth)
+long <- seq(from = 120, to = 180, by = binwidth)
+long_min <- 120
+long_max <- 180
+lat_min <- 0
+lat_max <- 40
+
+r <- raster(xmn=long_min, xmx=long_max, ymn=lat_min, ymx=lat_max, res=binwidth)
+
+head(coordinates(r))
+
+
+# change to lons and lats we want to count
+lon_typh <- runif(100, long_min, long_max)
+lat_typh <- runif(100, lat_min, lat_max)
+pos <- data.frame(lon_typh, lat_typh)
+head(pos)
+
+
+count_r <- rasterize(pos, r, fun="count")
+count_r_points <- rasterToPoints(count_r)
+counts_by_cell <- cbind(cell=cellFromXY(count_r, count_r_points[,1:2]), value=count_r_points[,3])
+
+
+grid_with_counts <- cbind(coordinates(r), counts=0)
+
+colnames(grid_with_counts) <- c("LONGITUDE", "LATITUDE", "COUNTS")
+
+grid_with_counts[counts_by_cell[, 1], ] <- counts_by_cell[, 2]
+
+grid_with_counts
+
+
+coor_grid_w_counts <- function(long_min, long_max, lat_min, lat_max,
+                               long_typh_seq, lat_typh_seq,binwidth = binwidth) {
+    r <- raster(xmn=long_min, xmx=long_max, ymn=lat_min, ymx=lat_max, res=binwidth)
+    pos <- data.frame(long_typh_seq, lat_typh_seq)
+    count_r <- rasterize(pos, r, fun="count")
+    count_r_points <- rasterToPoints(count_r)
+    counts_by_cell <- cbind(cell=cellFromXY(count_r,
+                                            count_r_points[,1:2]),
+                            value=count_r_points[,3])
+    grid_with_counts <- cbind(coordinates(r), counts=0)
+
+    colnames(grid_with_counts) <- c("LONGITUDE", "LATITUDE", "COUNTS")
+
+    grid_with_counts[counts_by_cell[, 1], ] <- counts_by_cell[, 2]
+
+    return(grid_with_counts)
+    
+}
+
+test_case <- coor_grid_w_counts(long_min=120, long_max=180, lat_min=0, lat_max=40,
+                                lon_typh, lat_typh)
+
+
+head(grid_with_counts)
+
+head(test_case)
+
+identical(grid_with_counts, test_case)
+
+```
+

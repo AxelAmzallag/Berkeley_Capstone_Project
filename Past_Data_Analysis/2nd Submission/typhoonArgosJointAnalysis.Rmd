@@ -1,0 +1,37 @@
+---
+title: "Typhoon ARGOs mix"
+author: "BestARGOS"
+date: "3/29/2021"
+output: html_document
+---
+```{r, message = FALSE}
+
+# clean data chunk
+
+library(tidyverse)
+typh <- read_csv("../typhoon_data/bwp_2019/2019_typh_data.csv")
+
+typh$yr_cyc_num <- gsub(pattern = ",",replacement = "",x = typh$yr_cyc_num)
+typh$mslp <- as.numeric(gsub(pattern = ",",replacement = "",x = typh$mslp))
+
+# NEED TO REPLACE with NEGATIVE SIGNS FOR W/S
+
+typh$lat <- as.numeric(gsub(pattern = "(N,|S,)",replacement = "",x = typh$lat))/10
+typh$long <- as.integer(gsub(pattern = "(E,|W,)",replacement = "",x = typh$long))/10
+```
+
+
+```{r}
+first <- typh %>% filter(yr_cyc_num == "01")
+
+typh %>% group_by(yr_cyc_num) %>% filter(row_number()==1)
+
+
+
+library(ggmap)
+
+world <- get_map(location=c(left = 120, right = 180, bottom = 0, top = 60), source="osm", color="bw", crop=FALSE)
+
+
+```
+

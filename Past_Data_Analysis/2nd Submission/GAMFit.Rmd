@@ -1,0 +1,328 @@
+---
+title: "gam fit"
+author: "JE Hug"
+output: pdf_document
+---
+
+```{r setup, include=TRUE, message = FALSE}
+library(tidyverse)
+library(magrittr)
+library(dplyr)
+library(mgcv)
+```
+
+
+```{r Read in Data}
+# read in df
+huge <- read.csv(file = "../../Full_Data_Second_Clean/2020_08_Covariates_Pacific.csv")
+
+# take away NA
+covariatesDF <- na.omit(huge)
+
+# select columns we need ( a single buoy)
+
+all_buoys_no_date <- covariatesDF %>% dplyr::select(PLATFORM_NUMBER, LONGITUDE, LATITUDE, TEMP_ADJUSTED, PRES_ADJUSTED )
+
+
+all_buoys_no_date %<>% dplyr::filter(PRES_ADJUSTED > 15)
+
+
+```
+
+
+
+```{r}
+library(mgcv)
+
+# pick a left out buoy to see what the predicted buoy looks like
+
+leftout <- all_buoys_no_date %>% dplyr::filter(PLATFORM_NUMBER == 2902748 & LONGITUDE == 151.87 & LATITUDE == 32.502) %>% 
+  select(-TEMP_ADJUSTED)
+
+# take the data except the left out buoy
+
+test_buoy <- all_buoys_no_date %>% dplyr::filter(PLATFORM_NUMBER != 2902748 & LONGITUDE != 151.87 & LATITUDE != 32.502)
+
+
+# fit the model
+# we use an interaction of longitude and latitude
+fit <- gam(formula = TEMP_ADJUSTED ~ s(LONGITUDE,LATITUDE) + s(PRES_ADJUSTED) , data=test_buoy, method = "REML")
+
+# summary of the fit
+summary(fit)
+
+
+
+# predict the leftout temperatures from the GAM
+
+TEMP_ADJUSTED <- predict.gam(object = fit,newdata = leftout )
+
+# bind 
+
+dearlord <- cbind(leftout,TEMP_ADJUSTED)
+
+# plot the predicted
+
+dearlord %>% ggplot(aes(x=TEMP_ADJUSTED,y=PRES_ADJUSTED))+
+  geom_point()
+
+# plot the true
+
+all_buoys_no_date %>% filter(PLATFORM_NUMBER == 2902748 & LONGITUDE == 151.87 & LATITUDE == 32.502) %>% ggplot(aes(x=TEMP_ADJUSTED,y=PRES_ADJUSTED))+
+  geom_point()
+```
+
+
+Some thoughts on this, we don't capture the kink but the overall shape may be okay?
+We can try and bin blocks in the region and fit a gamm (mixed model) where 
+our random whatevers (idk smooths?) are over these blocks. Alternatively 
+I used the interaction here but I'm not sure what it does I went from this 
+GAM guide https://noamross.github.io/gams-in-r-course/chapter3 , also see 
+Simon Wood's text Generalized additive models, from which the mgcv package 
+comes from! A GP will be very difficult to do, but we can try but again I'm concerned 
+about capturing the kink.
+
+
+
+
+# correlating surface temp to typhoons
+
+
+```{r}
+
+library(gamm4)
+binned <- test_buoy %>% mutate(location_bin=case_when(
+  LATITUDE > 25 & LATITUDE < 30 ~ "a",
+  LATITUDE > 30 & LATITUDE < 35 ~ "b",
+  LATITUDE > 35 & LATITUDE < 40 ~ "c",
+  LATITUDE > 40 & LATITUDE < 45 ~ "d",
+  LATITUDE > 45 & LATITUDE < 50 ~ "e",
+  LATITUDE > 50 & LATITUDE < 55 ~ "f"
+))
+
+binned$location_bin <- as.factor(binned$location_bin)
+
+
+
+
+fit2 <- gamm4(formula = TEMP_ADJUSTED ~ s(LONGITUDE,LATITUDE) + s(PRES_ADJUSTED, by = location_bin) ,random=~(1|location_bin), data=binned)
+
+
+
+```
+
+
+```{r IMPORT TYPHOON DATA}
+
+typh <- read_csv("../typhoon_data/bwp_2019/2019_typh_data.csv")
+
+typh$yr_cyc_num <- gsub(pattern = ",",replacement = "",x = typh$yr_cyc_num)
+typh$mslp <- as.numeric(gsub(pattern = ",",replacement = "",x = typh$mslp))
+
+# NEED TO REPLACE with NEGATIVE SIGNS FOR W/S
+
+typh$lat <- as.numeric(gsub(pattern = "(N,|S,)",replacement = "",x = typh$lat))/10
+typh$long <- as.integer(gsub(pattern = "(E,|W,)",replacement = "",x = typh$long))/10
+
+
+firstfive <- typh %>% group_by(yr_cyc_num) %>% filter(row_number()==c(1:5))
+colnames(firstfive) <- c("yr_cyc_num","date_time","LATITUDE","LONGITUDE","vmax","mslp","typh_grade")
+```
+
+
+```{r}
+withall <- cbind(firstfive, PRES_ADJUSTED = 10)
+predictedST <- predict.gam(fit, withall)
+
+withpred <- cbind(withall,surTemp = predictedST)
+
+summary(withpred$surTemp)
+```
+
+
+# mapping of thermocline depth
+
+```{r}
+
+## Useful buoys -- Deep enough to use the variable representative isotherm 
+## formula (> 400 meters) and should also have surface temperature values.
+## 
+## For the variable isotherm formula, the equation is as follows:
+## 
+##  TT = T(MLD) – 0.25[T(MLD) – T(400m)]
+##
+## TT -- Thermocline Temperature
+## T(MLD) -- Temperature at the base of the mixed layer
+## T(400m) -- Temperature at 400 meters
+## 
+## For T(MLD), we use surface temperature minus 0.8.
+##
+## See Fiedler 2010, pg. 319, for more details. Link below:
+## https://aslopubs.onlinelibrary.wiley.com/doi/pdfdirect/10.4319/lom.2010.8.313
+## 
+
+
+deepBuoys <- all_buoys_no_date %>% filter(PRES_ADJUSTED > 400 & TEMP_ADJUSTED < 35) %>%
+               group_by(PLATFORM_NUMBER , LONGITUDE , LATITUDE) %>%
+               summarise( TEMP_DEEP = max(TEMP_ADJUSTED ) )
+
+surfaceBuoys <- all_buoys_no_date %>% filter(PRES_ADJUSTED < 30 & PRES_ADJUSTED > 10) %>%
+                group_by(PLATFORM_NUMBER , LONGITUDE , LATITUDE) %>%
+                summarise( SURFACE_TEMP = mean(TEMP_ADJUSTED) )
+
+usefulBuoys <- inner_join( deepBuoys , surfaceBuoys )
+
+usefulBuoys$TEMP_MLD <- usefulBuoys$SURFACE_TEMP - 0.8
+
+usefulBuoys$TEMP_THERMOCLINE <- usefulBuoys$TEMP_MLD - 0.25 * ( usefulBuoys$TEMP_MLD -
+                                  usefulBuoys$TEMP_DEEP )
+
+usefulBuoys$THERMOCLINE_DEPTH <- NA
+
+
+## This for() loop adds the THERMOCLINE_DEPTH to each entry using the value
+## immediately below the thermocline level.
+##
+## ~ 1-2% of the data is quite strange here: It's having trouble locating thermoclines
+## for those particular buoys. Should investigate further.
+##
+## Also, this code is slow as f#@%, even though it runs.
+for(i in 1:nrow(usefulBuoys)){
+  single_working_buoy <- all_buoys_no_date %>%
+                         filter( PLATFORM_NUMBER == usefulBuoys$PLATFORM_NUMBER[i] &
+                                 LONGITUDE == usefulBuoys$LONGITUDE[i] &
+                                 LATITUDE == usefulBuoys$LATITUDE[i] )
+  
+  dist_to_thermocline <- abs( single_working_buoy$TEMP_ADJUSTED - usefulBuoys$TEMP_THERMOCLINE[i] )
+  temp_sorting_value <- sort( dist_to_thermocline )[3]
+  
+  rows_near_therm <- single_working_buoy[ dist_to_thermocline < temp_sorting_value , ]
+  
+  usefulBuoys$THERMOCLINE_DEPTH[i] <- min( rows_near_therm$PRES_ADJUSTED )
+  
+}
+
+
+## Here is a group of weird buoys that don't fit or seem to have thermoclines. 
+## They make up about ~1.5% of total data.
+weirdBuoys <- usefulBuoys[ usefulBuoys$THERMOCLINE_DEPTH > 400 , ]
+
+fitThermDepth <- gam(formula = THERMOCLINE_DEPTH ~ s(LONGITUDE,LATITUDE), data = usefulBuoys)
+```
+
+
+We will now import another months data and predict the thermocline depth there 
+and see if the model does a good job.
+
+
+```{r}
+seperateMonth <- read.csv(file = "../../Full_Data_Second_Clean/2019_08_Covariates_Pacific.csv")
+
+
+# take away NA
+nona <- na.omit(seperateMonth)
+
+# select columns we need ( a single buoy)
+
+sepmonth <- nona %>% dplyr::select(PLATFORM_NUMBER, LONGITUDE, LATITUDE, TEMP_ADJUSTED, PRES_ADJUSTED )
+
+
+sepmonth %<>% dplyr::filter(PRES_ADJUSTED > 15)
+
+thermpred <- predict.gam(fitThermDepth, sepmonth)
+
+sepmonthwp <- cbind(sepmonth,thermpred)
+
+
+
+```
+
+Get what we would have predicted had we the full buoy data
+
+```{r}
+
+## Useful buoys -- Deep enough to use the variable representative isotherm 
+## formula (> 400 meters) and should also have surface temperature values.
+## 
+## For the variable isotherm formula, the equation is as follows:
+## 
+##  TT = T(MLD) – 0.25[T(MLD) – T(400m)]
+##
+## TT -- Thermocline Temperature
+## T(MLD) -- Temperature at the base of the mixed layer
+## T(400m) -- Temperature at 400 meters
+## 
+## For T(MLD), we use surface temperature minus 0.8.
+##
+## See Fiedler 2010, pg. 319, for more details. Link below:
+## https://aslopubs.onlinelibrary.wiley.com/doi/pdfdirect/10.4319/lom.2010.8.313
+## 
+
+
+deepBuoys <- sepmonthwp %>% filter(PRES_ADJUSTED > 400 & TEMP_ADJUSTED < 35) %>%
+               group_by(PLATFORM_NUMBER , LONGITUDE , LATITUDE) %>%
+               summarise( TEMP_DEEP = max(TEMP_ADJUSTED ) )
+
+surfaceBuoys <- sepmonthwp %>% filter(PRES_ADJUSTED < 30 & PRES_ADJUSTED > 10) %>%
+                group_by(PLATFORM_NUMBER , LONGITUDE , LATITUDE) %>%
+                summarise( SURFACE_TEMP = mean(TEMP_ADJUSTED) )
+
+usefulBuoys <- inner_join( deepBuoys , surfaceBuoys )
+
+usefulBuoys$TEMP_MLD <- usefulBuoys$SURFACE_TEMP - 0.8
+
+usefulBuoys$TEMP_THERMOCLINE <- usefulBuoys$TEMP_MLD - 0.25 * ( usefulBuoys$TEMP_MLD -
+                                  usefulBuoys$TEMP_DEEP )
+
+usefulBuoys$THERMOCLINE_DEPTH <- NA
+
+
+## This for() loop adds the THERMOCLINE_DEPTH to each entry using the value
+## immediately below the thermocline level.
+##
+## ~ 1-2% of the data is quite strange here: It's having trouble locating thermoclines
+## for those particular buoys. Should investigate further.
+##
+## Also, this code is slow as f#@%, even though it runs.
+for(i in 1:nrow(usefulBuoys)){
+  single_working_buoy <- sepmonthwp %>%
+                         filter( PLATFORM_NUMBER == usefulBuoys$PLATFORM_NUMBER[i] &
+                                 LONGITUDE == usefulBuoys$LONGITUDE[i] &
+                                 LATITUDE == usefulBuoys$LATITUDE[i] )
+  
+  dist_to_thermocline <- abs( single_working_buoy$TEMP_ADJUSTED - usefulBuoys$TEMP_THERMOCLINE[i] )
+  temp_sorting_value <- sort( dist_to_thermocline )[3]
+  
+  rows_near_therm <- single_working_buoy[ dist_to_thermocline < temp_sorting_value , ]
+  
+  usefulBuoys$THERMOCLINE_DEPTH[i] <- min( rows_near_therm$PRES_ADJUSTED )
+
+}
+
+truedepth <- usefulBuoys$THERMOCLINE_DEPTH
+
+preddepth <- sepmonthwp %>%  group_by(PLATFORM_NUMBER , LONGITUDE , LATITUDE) %>%
+               summarise(  thermpred= mean(thermpred) ) 
+final <- inner_join(usefulBuoys,preddepth,by=c("LONGITUDE","LATITUDE","PLATFORM_NUMBER"))
+
+final
+
+
+```
+
+
+
+What we need to do for model 2
+
+
+
+BIN OUR AREA into independent bins essentially (this should be justified somehow)
+
+Take all the typhoon data, and count how many on average each bin gets hit with a typhoon.
+
+Now get the average thermocline depth in each bin. 
+
+Now regress the count of typhoon this can't be binomial since we don't really have "trials" 
+per say, maybe we do??? Regress the average count of typhoons on the thermocline depth. Observe if there is relationship. In essence this allows us to see the relationship but 
+I don't think it lets us see the probability and of course this isn't causal. We would need to look at other confounders if we want that.
+

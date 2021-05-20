@@ -1,0 +1,224 @@
+---
+title: "finalgams"
+author: "J.E. Hug"
+date: "4/27/2021"
+output: html_document
+---
+
+```{r setup}
+source("getThermDepth.R")
+library(ggplot2) # plotting
+library(magrittr) # pipes
+library(lubridate) # data manipulation
+library(dplyr) # data frame cleaning
+library(lobstr) # object size
+library(data.table) # data frame manipulation
+library(pastecs) # space time ecological time series
+library(mgcv) # generalized additive models
+library(gamm4) # mixed model gams with lme4 fitting
+library(ggmap) # heat map
+library(RColorBrewer) # heat map
+```
+
+
+```{r FIT FULL THERMOCLINE OLD}
+files <- fs::dir_ls(path = "../../august/")[1]
+
+
+# read in all the files 
+
+multipleaug <- 
+  do.call(rbind,
+          lapply(files, read.csv))
+
+# remove NA
+fulldata <- na.omit(multipleaug)
+
+# select columns we need
+colsneed <- fulldata %>% dplyr::select(PLATFORM_NUMBER,
+                                          LONGITUDE,
+                                          LATITUDE,
+                                          TEMP_ADJUSTED,
+                                          PRES_ADJUSTED ,
+                                          PSAL_ADJUSTED)
+
+colsneed %<>% dplyr::filter(PRES_ADJUSTED > 15)
+
+# let's do the most simple model 
+
+fitthermdirect1 <- bam(TEMP_ADJUSTED ~ s(LONGITUDE,LATITUDE, bs = "sos")+s(LATITUDE,bs= "gp")+
+                         +s(PRES_ADJUSTED),data =
+                        colsneed) 
+summary(fitthermdirect1)
+gam.check(fitthermdirect1)
+
+
+
+```
+
+
+```{r Fit thermo depth only OLD}
+
+# base model no special splines 
+
+# get thermocline depth vector and attach it 
+
+thermdepthaug <- getThermDepth(colsneed)
+
+thermdepthaug %<>% filter(LATITUDE < 40 )
+# first we fit a model with just latitude and longitude
+
+fitThermDepth1 <- bam(formula = THERMOCLINE_DEPTH ~ s(LONGITUDE,LATITUDE),
+                      data = thermdepthaug)
+
+summary(fitThermDepth1)
+gam.check(fitThermDepth1)
+
+# add surface temp
+
+
+fitThermDepth2 <- bam(formula = THERMOCLINE_DEPTH~ s(LONGITUDE,LATITUDE)+
+                        s(SURFACE_TEMP, bs = "cs"), data = thermdepthaug)
+
+summary(fitThermDepth2)
+gam.check(fitThermDepth1)
+
+
+# can do more with splines and such
+
+
+
+```
+
+
+```{r data load and clean}
+datjan <- read.csv(file = "~/Downloads/scf/2019_01_Covariates_Pacific.csv")
+datfeb <- read.csv(file = "~/Downloads/scf/2019_02_Covariates_Pacific.csv")
+datmar <- read.csv(file = "~/Downloads/scf/2019_03_Covariates_Pacific.csv")
+datapr <- read.csv(file = "~/Downloads/scf/2019_04_Covariates_Pacific.csv")
+datmay <- read.csv(file = "~/Downloads/scf/2019_05_Covariates_Pacific.csv")
+datjun <- read.csv(file = "~/Downloads/scf/2019_06_Covariates_Pacific.csv")
+datjul <- read.csv(file = "~/Downloads/scf/2019_07_Covariates_Pacific.csv")
+dataug <- read.csv(file = "~/Downloads/scf/2019_08_Covariates_Pacific.csv")
+datsep <- read.csv(file = "~/Downloads/scf/2019_09_Covariates_Pacific.csv")
+datoct <- read.csv(file = "~/Downloads/scf/2019_10_Covariates_Pacific.csv")
+datnov <- read.csv(file = "~/Downloads/scf/2019_11_Covariates_Pacific.csv")
+datdec <- read.csv(file = "~/Downloads/scf/2019_12_Covariates_Pacific.csv")
+
+# label with the Month
+
+datjan <- cbind(datjan, month = "jan")
+datfeb <- cbind(datfeb, month = "feb")
+datmar <- cbind(datmar, month = "mar")
+datapr <- cbind(datapr, month = "apr")
+datmay <- cbind(datmay, month = "may")
+datjun <- cbind(datjun, month = "jun")
+datjul <- cbind(datjul, month = "jul")
+dataug <- cbind(dataug, month = "aug")
+datsep <- cbind(datsep, month = "sep")
+datoct <- cbind(datoct, month = "oct")
+datnov <- cbind(datnov, month = "nov")
+datdec <- cbind(datdec, month = "dec")
+
+
+thermDepth2019p1 <- getThermDepth(rbind(datjan %>% filter(LATITUDE<40) %>% na.omit(),
+                                        datfeb %>% filter(LATITUDE<40) %>% na.omit(),
+                                        datmar %>% filter(LATITUDE<40) %>% na.omit()),
+                                month = TRUE)
+
+thermDepth2019p2 <- getThermDepth(rbind(datapr %>% filter(LATITUDE<40) %>% na.omit(),
+                                        datmay %>% filter(LATITUDE<40) %>% na.omit(),
+                                        datjun %>% filter(LATITUDE<40) %>% na.omit()),
+                                month = TRUE)
+
+thermDepth2019p3 <- getThermDepth(rbind(datjul %>% filter(LATITUDE<40) %>% na.omit(),
+                                        dataug %>% filter(LATITUDE<40) %>% na.omit(),
+                                        datsep %>% filter(LATITUDE<40) %>% na.omit()),
+                                month = TRUE)
+
+
+thermDepth2019p4 <- getThermDepth(rbind(datoct %>% filter(LATITUDE<40) %>% na.omit(),
+                                        datnov %>% filter(LATITUDE<40) %>% na.omit(),
+                                        datdec %>% filter(LATITUDE<40) %>% na.omit()),
+                                month = TRUE)
+
+thermDepth2019 <- rbind(thermDepth2019p1,thermDepth2019p2,thermDepth2019p3,
+                        thermDepth2019p4)
+
+
+thermDepth2019$month<- as.factor(thermDepth2019$month)
+
+thermDepth2019 %<>% filter(THERMOCLINE_DEPTH > 0) 
+
+save(thermDepth2019,file = "./RData/testthermDepth2019.RData")
+```
+
+
+
+
+```{r}
+
+# 2017 is broken use as test data.
+# there is an outlier and like check for broken
+# REMEMBER TO FILTER TRAIN DATA THERMOCLINE LESS THAN 300
+
+# load in the data as thermdepthtrain first
+load("./RData/thermDepth2016.RData")
+load("./RData/thermDepth2017.RData")
+load("./RData/thermDepth2018.RData")
+load("./RData/testthermDepth2019.RData")
+
+dataModelInput <- rbind(thermDepth2016,thermDepth2017,thermDepth2018) %>% 
+                  filter(month %in% c("apr","may","jun","jul","aug","sep","oct"),
+                         THERMOCLINE_DEPTH < 400 )
+
+thermDepthgam <- bam(formula = sqrt(THERMOCLINE_DEPTH) ~ s(LATITUDE,LONGITUDE, bs="sos", k= 100)+s(LATITUDE, bs = "gp", k = 22)+s(LATITUDE, month, bs = "re", k =15)+s(month, bs='re', k = 15),data = dataModelInput)
+
+testset <- thermDepth2019 %>% filter(month %in% c("apr","may","jun","jul","aug","sep","oct"),
+                         THERMOCLINE_DEPTH < 400 )
+
+predicted2019 <- predict.bam(thermDepthgam,newdata = testset %>%  select(-THERMOCLINE_DEPTH)  )
+
+mse <- sqrt(mean((predicted2019^2-testset$THERMOCLINE_DEPTH)^2))
+mse
+
+gam.check(thermDepthgam)
+
+qq.gam(thermDepthgam,main="Scaled t response GAM qq-plot")
+```
+
+
+```{r}
+# t dist gams
+load("./RData/tgam.RData")
+
+summary(thermDepthgam2)
+
+testset <- thermDepth2017 %>% filter(THERMOCLINE_DEPTH < 300)
+
+
+predicted2019t <- predict.bam(thermDepthgam2,newdata = (testset %>% dplyr::select(-THERMOCLINE_DEPTH))  )
+
+mse <- sqrt(mean((predicted2019t^2-testset$THERMOCLINE_DEPTH)^2))
+mse
+
+
+model2 <- thermDepthgam2
+plot(thermDepthgam2)
+
+testfull <- thermDepth2019 %>% filter( THERMOCLINE_DEPTH < 400 ) %>% filter(month == "jan")
+
+
+predicted2019full <- predict.bam(thermDepthgam2,newdata = testfull %>%  dplyr::select(-THERMOCLINE_DEPTH)   )
+
+
+mse <- sqrt(mean((predicted2019full^2-testfull$THERMOCLINE_DEPTH)^2))
+mse
+
+```
+
+
+
+
+
+

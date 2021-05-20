@@ -1,0 +1,602 @@
+
+
+
+
+```{r setup}
+library(ggplot2) # plotting
+library(magrittr) # pipes
+library(lubridate) # data manipulation
+library(dplyr) # data frame cleaning
+library(lobstr) # object size
+library(data.table) # data frame manipulation
+library(pastecs) # space time ecological time series
+library(mgcv) # generalized additive models
+library(gamm4) # mixed model gams with lme4 fitting
+library(ggmap) # heat map
+library(RColorBrewer) # heat map
+library(grid)
+library(gridExtra)
+
+
+source("./getThermDepth.R")
+```
+
+
+
+
+
+
+```{r Reading in Data}
+
+## Getting only the buoys for the plot ##
+platforms = c( "5901352" , "5901558" , "5901861" , "4900806" , "4901119" , "4901070")
+longitude = c( "165.778" , "166.436" , "160.680" , "177.278" , "176.726" , "179.127")
+latitude = c( "8.497" , "18.221" , "11.437" , "57.794" , "59.370" , "56.578" )
+
+
+# import data from multiple months of same year for instance.
+<<<<<<< HEAD
+# datjan <- read.csv(file = "../../Local Work/Data_Cleaning/Full_Data_Second_Clean/2010_01_Covariates_Pacific.csv")
+# datfeb <- read.csv(file = "../../Local Work/Data_Cleaning/Full_Data_Second_Clean/2010_02_Covariates_Pacific.csv")
+# datmar <- read.csv(file = "../../Local Work/Data_Cleaning/Full_Data_Second_Clean/2010_03_Covariates_Pacific.csv")
+# datapr <- read.csv(file = "../../Local Work/Data_Cleaning/Full_Data_Second_Clean/2010_04_Covariates_Pacific.csv")
+# datmay <- read.csv(file = "../../Local Work/Data_Cleaning/Full_Data_Second_Clean/2010_05_Covariates_Pacific.csv")
+# datjun <- read.csv(file = "../../Local Work/Data_Cleaning/Full_Data_Second_Clean/2010_06_Covariates_Pacific.csv")
+# datjul <- read.csv(file = "../../Local Work/Data_Cleaning/Full_Data_Second_Clean/2010_07_Covariates_Pacific.csv")
+# dataug <- read.csv(file = "../../Local Work/Data_Cleaning/Full_Data_Second_Clean/2010_08_Covariates_Pacific.csv")
+# datsep <- read.csv(file = "../../Local Work/Data_Cleaning/Full_Data_Second_Clean/2010_09_Covariates_Pacific.csv")
+# datoct <- read.csv(file = "../../Local Work/Data_Cleaning/Full_Data_Second_Clean/2010_10_Covariates_Pacific.csv")
+# datnov <- read.csv(file = "../../Local Work/Data_Cleaning/Full_Data_Second_Clean/2010_11_Covariates_Pacific.csv")
+# datdec <- read.csv(file = "../../Local Work/Data_Cleaning/Full_Data_Second_Clean/2010_12_Covariates_Pacific.csv")
+# 
+datjan <- read.csv(file = "~/Downloads/2010/2010_01_Covariates_Pacific.csv")
+datfeb <- read.csv(file = "~/Downloads/2010/2010_02_Covariates_Pacific.csv")
+datmar <- read.csv(file = "~/Downloads/2010/2010_03_Covariates_Pacific.csv")
+datapr <- read.csv(file = "~/Downloads/2010/2010_04_Covariates_Pacific.csv")
+datmay <- read.csv(file = "~/Downloads/2010/2010_05_Covariates_Pacific.csv")
+datjun <- read.csv(file = "~/Downloads/2010/2010_06_Covariates_Pacific.csv")
+datjul <- read.csv(file = "~/Downloads/2010/2010_07_Covariates_Pacific.csv")
+dataug <- read.csv(file = "~/Downloads/2010/2010_08_Covariates_Pacific.csv")
+datsep <- read.csv(file = "~/Downloads/2010/2010_09_Covariates_Pacific.csv")
+datoct <- read.csv(file = "~/Downloads/2010/2010_10_Covariates_Pacific.csv")
+datnov <- read.csv(file = "~/Downloads/2010/2010_11_Covariates_Pacific.csv")
+datdec <- read.csv(file = "~/Downloads/2010/2010_12_Covariates_Pacific.csv")
+
+
+datjan <- read.csv(file = "../../Local Work/Data_Cleaning/Full_Data_Second_Clean/2010_01_Covariates_Pacific.csv")
+datfeb <- read.csv(file = "../../Local Work/Data_Cleaning/Full_Data_Second_Clean/2010_02_Covariates_Pacific.csv")
+datmar <- read.csv(file = "../../Local Work/Data_Cleaning/Full_Data_Second_Clean/2010_03_Covariates_Pacific.csv")
+datapr <- read.csv(file = "../../Local Work/Data_Cleaning/Full_Data_Second_Clean/2010_04_Covariates_Pacific.csv")
+datmay <- read.csv(file = "../../Local Work/Data_Cleaning/Full_Data_Second_Clean/2010_05_Covariates_Pacific.csv")
+datjun <- read.csv(file = "../../Local Work/Data_Cleaning/Full_Data_Second_Clean/2010_06_Covariates_Pacific.csv")
+datjul <- read.csv(file = "../../Local Work/Data_Cleaning/Full_Data_Second_Clean/2010_07_Covariates_Pacific.csv")
+dataug <- read.csv(file = "../../Local Work/Data_Cleaning/Full_Data_Second_Clean/2010_08_Covariates_Pacific.csv")
+datsep <- read.csv(file = "../../Local Work/Data_Cleaning/Full_Data_Second_Clean/2010_09_Covariates_Pacific.csv")
+datoct <- read.csv(file = "../../Local Work/Data_Cleaning/Full_Data_Second_Clean/2010_10_Covariates_Pacific.csv")
+datnov <- read.csv(file = "../../Local Work/Data_Cleaning/Full_Data_Second_Clean/2010_11_Covariates_Pacific.csv")
+datdec <- read.csv(file = "../../Local Work/Data_Cleaning/Full_Data_Second_Clean/2010_12_Covariates_Pacific.csv")
+
+# datjan <- read.csv(file = "~/Downloads/2010/2010_01_Covariates_Pacific.csv")
+# datfeb <- read.csv(file = "~/Downloads/2010/2010_02_Covariates_Pacific.csv")
+# datmar <- read.csv(file = "~/Downloads/2010/2010_03_Covariates_Pacific.csv")
+# datapr <- read.csv(file = "~/Downloads/2010/2010_04_Covariates_Pacific.csv")
+# datmay <- read.csv(file = "~/Downloads/2010/2010_05_Covariates_Pacific.csv")
+# datjun <- read.csv(file = "~/Downloads/2010/2010_06_Covariates_Pacific.csv")
+# datjul <- read.csv(file = "~/Downloads/2010/2010_07_Covariates_Pacific.csv")
+# dataug <- read.csv(file = "~/Downloads/2010/2010_08_Covariates_Pacific.csv")
+# datsep <- read.csv(file = "~/Downloads/2010/2010_09_Covariates_Pacific.csv")
+# datoct <- read.csv(file = "~/Downloads/2010/2010_10_Covariates_Pacific.csv")
+# datnov <- read.csv(file = "~/Downloads/2010/2010_11_Covariates_Pacific.csv")
+# datdec <- read.csv(file = "~/Downloads/2010/2010_12_Covariates_Pacific.csv")
+
+
+datjan %<>% na.omit()
+datfeb %<>% na.omit()
+datmar %<>% na.omit()
+datapr %<>% na.omit()
+datmay %<>% na.omit()
+datjun %<>% na.omit()
+datjul %<>% na.omit()
+dataug %<>% na.omit()
+datsep %<>% na.omit()
+datoct %<>% na.omit()
+datnov %<>% na.omit()
+datdec %<>% na.omit()
+
+
+
+```
+
+
+
+
+```{r Subsetting}
+# label with the Month
+
+datjan <- cbind(datjan, month = "jan")
+datfeb <- cbind(datfeb, month = "feb")
+datmar <- cbind(datmar, month = "mar")
+datapr <- cbind(datapr, month = "apr")
+datmay <- cbind(datmay, month = "may")
+datjun <- cbind(datjun, month = "jun")
+datjul <- cbind(datjul, month = "jul")
+dataug <- cbind(dataug, month = "aug")
+datsep <- cbind(datsep, month = "sep")
+datoct <- cbind(datoct, month = "oct")
+datnov <- cbind(datnov, month = "nov")
+datdec <- cbind(datdec, month = "dec")
+
+dattog <- rbind(datjan, datfeb, datmar, datapr, datmay, datjun,
+                datjul, dataug, datsep, datoct, datnov, datdec)
+
+dattog$month <- as.factor(dattog$month)
+
+dattog %<>% filter(LATITUDE < 40)
+
+dattog <- na.omit(dattog)
+
+partBuoy <- dattog %>% filter(PLATFORM_NUMBER %in% platforms)
+
+```
+
+
+```{r Fitting Models Josh Help?}
+
+# full thermocline fit 
+
+fitthermdirect1 <- bam(TEMP_ADJUSTED ~ s(LONGITUDE,LATITUDE, bs = "sos")+s(LATITUDE,bs= "gp")+s(LATITUDE, month, bs = "re")+s(PRES_ADJUSTED)+s(month, bs = "re"),data =
+                        dattog) 
+summary(fitthermdirect1)
+gam.check(fitthermdirect1)
+
+fitthermdirect2 <- bam(TEMP_ADJUSTED ~ s(LONGITUDE,LATITUDE, bs = "sos", k = 150)+s(LATITUDE,bs= "gp", k =40)+s(LATITUDE, month, bs = "re")+s(PRES_ADJUSTED, k = 70)+s(month, bs = "re"),data =
+                        dattog) 
+
+summary(fitthermdirect2)
+gam.check(fitthermdirect2)
+
+
+# july ones
+# 
+# 4901119	175.362	58.554
+# 
+# 4900806	177.476	58.364	
+# 
+# 5901352	170.157	8.683	
+# 
+# 5901558	166.874	17.998	
+# 
+# # august ones
+# 
+# 4901119	176.361	58.669
+# 
+# 4900806	177.278	57.794
+# 
+# 5901352	167.251	8.434	
+# 
+# 5901558	166.767	18.270
+# 
+# # # september 
+
+# 4901119	177.997	60.011	
+# 
+# 4900806	175.184	57.572	
+# 
+# 5901352	165.351	8.454	
+# 
+# 5901558	166.532	18.316	
+```
+
+
+
+
+```{r Therm depth 2010 model data}
+
+
+thermDepth2010p1 <- getThermDepth(rbind(datjan %>% filter(LATITUDE<40) %>% na.omit(),
+                                        datfeb %>% filter(LATITUDE<40) %>% na.omit(),
+                                        datmar %>% filter(LATITUDE<40) %>% na.omit()),
+                                month = TRUE)
+
+thermDepth2010p2 <- getThermDepth(rbind(datapr %>% filter(LATITUDE<40) %>% na.omit(),
+                                        datmay %>% filter(LATITUDE<40) %>% na.omit(),
+                                        datjun %>% filter(LATITUDE<40) %>% na.omit()),
+                                month = TRUE)
+
+thermDepth2010p3 <- getThermDepth(rbind(datjul %>% filter(LATITUDE<40) %>% na.omit(),
+                                        dataug %>% filter(LATITUDE<40) %>% na.omit(),
+                                        datsep %>% filter(LATITUDE<40) %>% na.omit()),
+                                month = TRUE)
+
+
+thermDepth2010p4 <- getThermDepth(rbind(datoct %>% filter(LATITUDE<40) %>% na.omit(),
+                                        datnov %>% filter(LATITUDE<40) %>% na.omit(),
+                                        datdec %>% filter(LATITUDE<40) %>% na.omit()),
+                                month = TRUE)
+
+thermDepth2010 <- rbind(thermDepth2010p1,thermDepth2010p2,thermDepth2010p3,
+                        thermDepth2010p4)
+
+
+thermDepth2010$month<- as.factor(thermDepth2010$month)
+
+thermDepth2010 %<>% filter(THERMOCLINE_DEPTH > 0) 
+
+
+
+thermDepth2010gam <- bam(formula = sqrt(THERMOCLINE_DEPTH) ~ s(LATITUDE,LONGITUDE, bs="sos", k= 100)+s(LATITUDE, month, bs = "re", k =15)+s(month, bs='re', k = 15),data = thermDepth2010)
+
+summary(thermDepth2010gam)
+gam.check(thermDepth2010gam)
+
+
+thermDepth2010tdist <- bam(formula = sqrt(THERMOCLINE_DEPTH) ~ s(LATITUDE,LONGITUDE, bs="sos", k= 300)+s(LATITUDE, bs = "gp", k = 22)+s(LATITUDE, month, bs = "re", k =15)+s(month, bs='re', k = 15),data = thermDepth2010, family = gaussian )
+
+
+
+summary(thermDepth2010tdist)
+gam.check(thermDepth2010tdist)
+
+```
+
+```{r The GIF map}
+
+# at one month
+
+# generate the lattice of points 
+
+getGamMap <- function(model, month, binwidth = 1 , mtitle = month ){
+  
+  lat <- seq(from = 0, to = 40, by = binwidth)
+  long <- seq(from = 120, to = 180, by = binwidth)
+  
+  grid <- expand.grid(long, lat)
+  
+  ngrid <- nrow(grid)
+  
+  colnames(grid) <- c("LONGITUDE", "LATITUDE")
+  grid <- cbind(grid, month = month)
+  
+  predValues <- predict.bam(model, newdata = grid)
+  
+  # code that does the heat map
+  
+  
+  world <-
+    get_map(
+      location = c(
+        left = 120,
+        right = 180,
+        bottom = 0,
+        top = 40
+      ),
+      source = "osm",
+      color = "bw",
+      crop = TRUE
+    )
+  heatmapdatpred <- cbind(grid, predicted = predValues ^ 2)
+  
+  rng <- range(0,150)
+  
+  q2 <- ggmap(world) +
+    stat_summary_2d(
+      data = heatmapdatpred,
+      aes(x = LONGITUDE, y = LATITUDE,
+          z = predicted),
+      fun = mean,
+      alpha = 0.4
+    ) +
+    labs(title = paste0("Thermocline Depth heat map as predicted by GAM in ",
+                        mtitle),x= 'Longitude', y = "Latitude")+
+    scale_fill_gradient2(name = "Thermocline Depth",low="green", mid="lightblue", high="red", #colors in the scale
+                         midpoint=mean(rng),    #same midpoint for plots (mean of the range)
+                         breaks=seq(0,200,25), #breaks in the scale bar
+                         limits=c(floor(rng[1]), ceiling(rng[2])))
+  
+  q2
+}
+
+
+
+
+ms <- c("jan", "feb", "mar", "apr", "may", "jun","jul","aug","sep","oct","nov",
+        "dec")
+
+
+mst <- c("January", "February", "March", "April", "May", "June","July","August",
+         "September","October","November","December")
+
+for (i in 1:12){
+  q <-getGamMap(thermDepthgam2,month = ms[i], mtitle = mst[i])
+  ggsave(filename = paste0("./tdistgif/heat_map0",i,".png"), plot = q)
+}
+
+# the real ones
+i <- 8
+for (i in 1:12){
+
+q1 <- ggmap(world) +
+    stat_summary_2d(data = thermDepth2010 %>% filter(month==ms[i]), aes(x = LONGITUDE, y = LATITUDE, 
+        z = THERMOCLINE_DEPTH), fun = mean, alpha = 0.6, bins = 30)+
+    scale_fill_gradient2(name = "Thermocline Depth",low="green", mid="lightblue", high="red", #colors in the scale
+                         midpoint=mean(rng),    #same midpoint for plots (mean of the range)
+                         breaks=seq(0,200,25), #breaks in the scale bar
+                         limits=c(floor(rng[1]), ceiling(rng[2])))+
+  labs(title = paste0("True Thermocline Depth heat\n map in ",mst[i]),
+       x="Longitude", y= "Latitude")
+  ggsave(filename = paste0("./examples2/heat_map0",i,".png"), plot = q1)
+}
+
+
+system("convert -delay 80 ./tdistgif/heat_*  ./tdistgif/ex_heatmap.gif")
+
+
+library(gridExtra)
+
+q1
+```
+
+
+
+
+
+```{r Plotting the Zoomed In 250 meter Example}
+
+buoychose <- c(5901352,4900806)
+
+
+pjan <- partBuoy %>% filter(PLATFORM_NUMBER==buoychose, month == "jan") %>% ggplot( aes( x=PRES_ADJUSTED , y=TEMP_ADJUSTED , 
+                       group = LATITUDE, color = as.factor(LATITUDE))) +
+               theme(axis.title.x=element_blank(),
+                     axis.title.y=element_blank()) +
+               geom_line( size = 0.2) +
+               scale_color_discrete( guide=FALSE ) +
+               ylim(0,35)+xlim(0,250) + ggtitle("January")
+
+
+pfeb <- partBuoy %>% filter(PLATFORM_NUMBER==buoychose, month == "feb") %>% ggplot( aes( x=PRES_ADJUSTED , y=TEMP_ADJUSTED , 
+                       group = LATITUDE, color = as.factor(LATITUDE))) +
+               theme(axis.title.x=element_blank(),
+                     axis.title.y=element_blank()) +
+               geom_line( size = 0.2) +
+               scale_color_discrete( guide=FALSE ) +
+               ylim(0,35)+xlim(0,250) + ggtitle("February")
+
+
+pmar <- partBuoy %>% filter(PLATFORM_NUMBER==buoychose, month == "mar") %>% ggplot( aes( x=PRES_ADJUSTED , y=TEMP_ADJUSTED , 
+                       group = LATITUDE, color = as.factor(LATITUDE))) +
+               theme(axis.title.x=element_blank(),
+                     axis.title.y=element_blank()) +
+               geom_line( size = 0.2) +
+               scale_color_discrete( guide=FALSE ) +
+               ylim(0,35)+xlim(0,250) + ggtitle("March")
+
+
+
+papr <- partBuoy %>% filter(PLATFORM_NUMBER==buoychose, month == "apr") %>% ggplot( aes( x=PRES_ADJUSTED , y=TEMP_ADJUSTED , 
+                       group = LATITUDE, color = as.factor(LATITUDE))) +
+               theme(axis.title.x=element_blank(),
+                     axis.title.y=element_blank()) +
+               geom_line( size = 0.2) +
+               scale_color_discrete( guide=FALSE ) +
+               ylim(0,35)+xlim(0,250) + ggtitle("April")
+
+
+pmay <- partBuoy %>% filter(PLATFORM_NUMBER==buoychose, month == "may") %>% ggplot( aes( x=PRES_ADJUSTED , y=TEMP_ADJUSTED , 
+                       group = LATITUDE, color = as.factor(LATITUDE))) +
+               theme(axis.title.x=element_blank(),
+                     axis.title.y=element_blank()) +
+               geom_line( size = 0.2) +
+               scale_color_discrete( guide=FALSE ) +
+               ylim(0,35)+xlim(0,250) + ggtitle("May")
+
+
+pjun <- partBuoy %>% filter(PLATFORM_NUMBER==buoychose, month == "jan") %>% ggplot( aes( x=PRES_ADJUSTED , y=TEMP_ADJUSTED , 
+                       group = LATITUDE, color = as.factor(LATITUDE))) +
+               theme(axis.title.x=element_blank(),
+                     axis.title.y=element_blank()) +
+               geom_line( size = 0.2) +
+               scale_color_discrete( guide=FALSE ) +
+               ylim(0,35)+xlim(0,250) + ggtitle("June")
+
+
+pjul <- partBuoy %>% filter(PLATFORM_NUMBER==buoychose, month == "jul") %>% ggplot( aes( x=PRES_ADJUSTED , y=TEMP_ADJUSTED , 
+                       group = LATITUDE, color = as.factor(LATITUDE))) +
+               theme(axis.title.x=element_blank(),
+                     axis.title.y=element_blank()) +
+               geom_line( size = 0.2) +
+               scale_color_discrete( guide=FALSE ) +
+               ylim(0,35)+xlim(0,250) + ggtitle("July")
+
+
+paug <-partBuoy %>% filter(PLATFORM_NUMBER==buoychose, month == "aug") %>% ggplot( aes( x=PRES_ADJUSTED , y=TEMP_ADJUSTED , 
+                       group = LATITUDE, color = as.factor(LATITUDE))) +
+               theme(axis.title.x=element_blank(),
+                     axis.title.y=element_blank()) +
+               geom_line( size = 0.2) +
+               scale_color_discrete( guide=FALSE ) +
+               ylim(0,35)+xlim(0,250) + ggtitle("August")
+
+
+
+
+psep <- partBuoy %>% filter(PLATFORM_NUMBER==buoychose, month == "sep") %>% ggplot( aes( x=PRES_ADJUSTED , y=TEMP_ADJUSTED , 
+                       group = LATITUDE, color = as.factor(LATITUDE))) +
+               theme(axis.title.x=element_blank(),
+                     axis.title.y=element_blank()) +
+               geom_line( size = 0.2) +
+               scale_color_discrete( guide=FALSE ) +
+               ylim(0,35)+xlim(0,250) + ggtitle("September")
+
+
+poct <- partBuoy %>% filter(PLATFORM_NUMBER==buoychose, month == "oct") %>% ggplot( aes( x=PRES_ADJUSTED , y=TEMP_ADJUSTED , 
+                       group = LATITUDE, color = as.factor(LATITUDE))) +
+               theme(axis.title.x=element_blank(),
+                     axis.title.y=element_blank()) +
+               geom_line( size = 0.2) +
+               scale_color_discrete( guide=FALSE ) +
+               ylim(0,35)+xlim(0,250) + ggtitle("October")
+
+
+pnov <- partBuoy %>% filter(PLATFORM_NUMBER==buoychose, month == "nov") %>% ggplot( aes( x=PRES_ADJUSTED , y=TEMP_ADJUSTED , 
+                       group = LATITUDE, color = as.factor(LATITUDE))) +
+               theme(axis.title.x=element_blank(),
+                     axis.title.y=element_blank()) +
+               geom_line( size = 0.2) +
+               scale_color_discrete( guide=FALSE ) +
+               ylim(0,35)+xlim(0,250) + ggtitle("November")
+
+
+pdec <- partBuoy %>% filter(PLATFORM_NUMBER==buoychose, month == "dec") %>% ggplot( aes( x=PRES_ADJUSTED , y=TEMP_ADJUSTED , 
+                       group = LATITUDE, color = as.factor(LATITUDE))) +
+               theme(axis.title.x=element_blank(),
+                     axis.title.y=element_blank()) +
+               geom_line( size = 0.2) +
+               scale_color_discrete( guide=FALSE ) +
+               ylim(0,35)+xlim(0,250) + ggtitle("December")
+
+
+
+
+grid.arrange(pjan, pfeb, pmar, papr, pmay, pjun,
+             pjul, paug, psep, poct, pnov, pdec,
+             top = textGrob("Comparison of Buoy With/Without Thermocline" ,
+                            gp = gpar(fontsize=20,font=3)),
+             left = textGrob("Temperature in Degrees Celsius",
+                             gp = gpar(fontsize=20,font=3) , rot = 90 ),
+             bottom = textGrob("Depth in Meters",gp=gpar(fontsize=20,font=3)))
+
+
+```
+
+
+
+```{r Plotting the Zoomed In 1500 meter Example}
+
+buoychose <- c(5901352,4900806)
+
+
+pjan <- partBuoy %>% filter(PLATFORM_NUMBER==buoychose, month == "jan") %>% ggplot( aes( x=PRES_ADJUSTED , y=TEMP_ADJUSTED , 
+                       group = LATITUDE, color = as.factor(LATITUDE))) +
+               theme(axis.title.x=element_blank(),
+                     axis.title.y=element_blank()) +
+               geom_line( size = 0.2) +
+               scale_color_discrete( guide=FALSE ) +
+               ylim(0,35)+xlim(0,1500) + ggtitle("January")
+
+
+pfeb <- partBuoy %>% filter(PLATFORM_NUMBER==buoychose, month == "feb") %>% ggplot( aes( x=PRES_ADJUSTED , y=TEMP_ADJUSTED , 
+                       group = LATITUDE, color = as.factor(LATITUDE))) +
+               theme(axis.title.x=element_blank(),
+                     axis.title.y=element_blank()) +
+               geom_line( size = 0.2) +
+               scale_color_discrete( guide=FALSE ) +
+               ylim(0,35)+xlim(0,1500) + ggtitle("February")
+
+
+pmar <- partBuoy %>% filter(PLATFORM_NUMBER==buoychose, month == "mar") %>% ggplot( aes( x=PRES_ADJUSTED , y=TEMP_ADJUSTED , 
+                       group = LATITUDE, color = as.factor(LATITUDE))) +
+               theme(axis.title.x=element_blank(),
+                     axis.title.y=element_blank()) +
+               geom_line( size = 0.2) +
+               scale_color_discrete( guide=FALSE ) +
+               ylim(0,35)+xlim(0,1500) + ggtitle("March")
+
+
+
+papr <- partBuoy %>% filter(PLATFORM_NUMBER==buoychose, month == "apr") %>% ggplot( aes( x=PRES_ADJUSTED , y=TEMP_ADJUSTED , 
+                       group = LATITUDE, color = as.factor(LATITUDE))) +
+               theme(axis.title.x=element_blank(),
+                     axis.title.y=element_blank()) +
+               geom_line( size = 0.2) +
+               scale_color_discrete( guide=FALSE ) +
+               ylim(0,35)+xlim(0,1500) + ggtitle("April")
+
+
+pmay <- partBuoy %>% filter(PLATFORM_NUMBER==buoychose, month == "may") %>% ggplot( aes( x=PRES_ADJUSTED , y=TEMP_ADJUSTED , 
+                       group = LATITUDE, color = as.factor(LATITUDE))) +
+               theme(axis.title.x=element_blank(),
+                     axis.title.y=element_blank()) +
+               geom_line( size = 0.2) +
+               scale_color_discrete( guide=FALSE ) +
+               ylim(0,35)+xlim(0,1500) + ggtitle("May")
+
+
+pjun <- partBuoy %>% filter(PLATFORM_NUMBER==buoychose, month == "jan") %>% ggplot( aes( x=PRES_ADJUSTED , y=TEMP_ADJUSTED , 
+                       group = LATITUDE, color = as.factor(LATITUDE))) +
+               theme(axis.title.x=element_blank(),
+                     axis.title.y=element_blank()) +
+               geom_line( size = 0.2) +
+               scale_color_discrete( guide=FALSE ) +
+               ylim(0,35)+xlim(0,1500) + ggtitle("June")
+
+
+pjul <- partBuoy %>% filter(PLATFORM_NUMBER==buoychose, month == "jul") %>% ggplot( aes( x=PRES_ADJUSTED , y=TEMP_ADJUSTED , 
+                       group = LATITUDE, color = as.factor(LATITUDE))) +
+               theme(axis.title.x=element_blank(),
+                     axis.title.y=element_blank()) +
+               geom_line( size = 0.2) +
+               scale_color_discrete( guide=FALSE ) +
+               ylim(0,35)+xlim(0,1500) + ggtitle("July")
+
+
+paug <-partBuoy %>% filter(PLATFORM_NUMBER==buoychose, month == "aug") %>% ggplot( aes( x=PRES_ADJUSTED , y=TEMP_ADJUSTED , 
+                       group = LATITUDE, color = as.factor(LATITUDE))) +
+               theme(axis.title.x=element_blank(),
+                     axis.title.y=element_blank()) +
+               geom_line( size = 0.2) +
+               scale_color_discrete( guide=FALSE ) +
+               ylim(0,35)+xlim(0,1500) + ggtitle("August")
+
+
+
+
+psep <- partBuoy %>% filter(PLATFORM_NUMBER==buoychose, month == "sep") %>% ggplot( aes( x=PRES_ADJUSTED , y=TEMP_ADJUSTED , 
+                       group = LATITUDE, color = as.factor(LATITUDE))) +
+               theme(axis.title.x=element_blank(),
+                     axis.title.y=element_blank()) +
+               geom_line( size = 0.2) +
+               scale_color_discrete( guide=FALSE ) +
+               ylim(0,35)+xlim(0,1500) + ggtitle("September")
+
+
+poct <- partBuoy %>% filter(PLATFORM_NUMBER==buoychose, month == "oct") %>% ggplot( aes( x=PRES_ADJUSTED , y=TEMP_ADJUSTED , 
+                       group = LATITUDE, color = as.factor(LATITUDE))) +
+               theme(axis.title.x=element_blank(),
+                     axis.title.y=element_blank()) +
+               geom_line( size = 0.2) +
+               scale_color_discrete( guide=FALSE ) +
+               ylim(0,35)+xlim(0,1500) + ggtitle("October")
+
+
+pnov <- partBuoy %>% filter(PLATFORM_NUMBER==buoychose, month == "nov") %>% ggplot( aes( x=PRES_ADJUSTED , y=TEMP_ADJUSTED , 
+                       group = LATITUDE, color = as.factor(LATITUDE))) +
+               theme(axis.title.x=element_blank(),
+                     axis.title.y=element_blank()) +
+               geom_line( size = 0.2) +
+               scale_color_discrete( guide=FALSE ) +
+               ylim(0,35)+xlim(0,1500) + ggtitle("November")
+
+
+pdec <- partBuoy %>% filter(PLATFORM_NUMBER==buoychose, month == "dec") %>% ggplot( aes( x=PRES_ADJUSTED , y=TEMP_ADJUSTED , 
+                       group = LATITUDE, color = as.factor(LATITUDE))) +
+               theme(axis.title.x=element_blank(),
+                     axis.title.y=element_blank()) +
+               geom_line( size = 0.2) +
+               scale_color_discrete( guide=FALSE ) +
+               ylim(0,35)+xlim(0,1500) + ggtitle("December")
+
+
+
+
+grid.arrange(pjan, pfeb, pmar, papr, pmay, pjun,
+             pjul, paug, psep, poct, pnov, pdec,
+             top = textGrob("Comparison of Buoy With/Without Thermocline" ,
+                            gp = gpar(fontsize=20,font=3)),
+             left = textGrob("Temperature in Degrees Celsius",
+                             gp = gpar(fontsize=20,font=3) , rot = 90 ),
+             bottom = textGrob("Depth in Meters",gp=gpar(fontsize=20,font=3)))
+
+```
+
+

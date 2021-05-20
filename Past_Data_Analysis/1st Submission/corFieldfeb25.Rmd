@@ -1,0 +1,134 @@
+```{r Example with January 2002, message=FALSE}
+library(sf)
+library(stars)
+library(tidyverse)
+library(lubridate)
+library(data.table)
+library(dtplyr)
+options(scipen = 999)
+# go get this from somewhere locally
+# huge <- read.csv(file="C:/Users/Axel Amzallag/Documents/UC Berkeley/STAT-222/Local Work/Data_Cleaning/Full_Data_Initial_Clean/2002_Covariates_Japan_Area.csv")
+
+huge <- read.csv(file = "../../Full_Data_Initial_Clean/2002_Covariates_Japan_Area.csv")
+# remove NA
+
+covariatesDF <- na.omit(huge)
+
+# careful this breaks the scientific notation
+
+
+
+# fix the date time
+
+covariatesDF$REFERENCE_DATE_TIME <- as.character(covariatesDF$REFERENCE_DATE_TIME)
+
+
+covariatesDF$DATE_TIME <- lubridate::as_date(covariatesDF$JULD,
+                   origin=lubridate::as_datetime(covariatesDF$REFERENCE_DATE_TIME))
+
+
+Jan <- covariatesDF %>% filter(DATE_TIME >= "2002-01-02" & DATE_TIME < "2002-01-31" ) %>% 
+  filter(PRES_ADJUSTED < 20) %>% mutate(PLATFORM_NUMBER = as.factor(PLATFORM_NUMBER))
+
+
+grouped <- Jan %>% group_by(PLATFORM_NUMBER) %>% summarise_at(c("PRES_ADJUSTED", "TEMP_ADJUSTED", "PSAL_ADJUSTED", "LATITUDE", "LONGITUDE"),.funs = mean) 
+
+
+grouped
+
+
+
+```
+
+
+```{r Initial map of points and Variogram}
+
+# even though we get an error here this still works??
+library(mapview)
+mapviewOptions(fgb = FALSE) 
+
+locations_sf <- sf::st_as_sf(grouped, coords = c("LONGITUDE", "LATITUDE"), crs = 4326)
+mapls <- mapview(locations_sf)
+mapshot(mapls, url = "try2.html" )
+
+
+
+## Variogram example ##
+
+# try and get correlation of all points to the distance from average Latitude and longitude
+dummy <- c(mean(grouped$LONGITUDE),mean(grouped$LATITUDE))
+# get the distances
+library(geosphere)
+
+lat_long_pairs <- as.matrix(grouped %>% select(LONGITUDE,LATITUDE))
+lat_long_pairs
+
+# get the distance
+
+dist <- distm(lat_long_pairs, dummy)
+
+
+cor(dist, grouped$TEMP_ADJUSTED)
+
+cor(dist, grouped$PSAL_ADJUSTED)
+
+
+# variograms
+
+library(gstat)
+
+vario <- grouped %>% select(TEMP_ADJUSTED, LATITUDE, LONGITUDE)
+
+grouped
+
+coordinates(vario) <- ~LATITUDE+LONGITUDE
+
+g <- gstat(id='temp',formula=TEMP_ADJUSTED~1,data=vario)
+
+
+expvar <- variogram(g)
+
+ggplot(expvar,aes(x=dist,y=gamma,size=np)) + geom_raster()+ scale_fill_gradientn(colours = rainbow(7))
+
+
+```
+
+
+```{r Initial attempt with ggmap}
+
+
+# Using the ggmap library: TEMPLATE at
+# shttps://stackoverflow.com/questions/45319970/generating-spatial-heat-map-via-ggmap-in-r-based-on-a-value
+
+library(ggmap)
+
+test_map <- get_map(c(left = 120 , bottom = 0 , right = 180 , top = 60))
+data <- grouped
+
+# Generate latitude and longitude bins
+longbreaks <- seq(floor(min(data$LONGITUDE)) , ceiling(max(data$LONGITUDE)) , by = 0.1 )
+latbreaks <- seq(floor(min(data$LATITUDE)) , ceiling(max(data$LATITUDE)) , by = 0.1 )
+
+# Allocate the data points into the bins
+data$LONG_BINS <- longbreaks[cut(data$LONGITUDE, breaks = longbreaks, labels=F)]
+data$LAT_BINS <- latbreaks[cut(data$LATITUDE, breaks = latbreaks, labels=F)]
+
+# make a map with a couple points on it
+dat2 <- rbind(c(4903291,155.726,44.035), c(2903387,131.346,26.866)) %>% data.frame()
+colnames(dat2) <- c("buoy","longitude", "latitude")
+ggmap(test_map)+geom_text(aes(x= longitude, y =latitude, label = buoy), data = dat2, nudge_y  = 1.1)+geom_point(aes(x= longitude, y =latitude), data = dat2)
+
+
+```
+
+
+Another map with ggmap
+
+```{r}
+grouped
+ggmap(test_map)+geom_point(aes(x= LONGITUDE, y =LATITUDE), data = grouped)+
+  labs(title = "Buoys from January 2002")
+
+```
+
+

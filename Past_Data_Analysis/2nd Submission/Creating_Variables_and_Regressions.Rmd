@@ -1,0 +1,307 @@
+---
+title: "past eda"
+author: "BESTARGOSgroup"
+output: pdf_document
+---
+
+```{r setup, include=TRUE, message = FALSE}
+library(tidyverse)
+library(furrr)
+library(sp)
+library(raster)
+library(ncdf4)
+library(lubridate)
+library(lobstr)
+```
+
+
+
+```{r Read in Data}
+# read in df
+huge <- read.csv(file = "../../Full_Data_Initial_Clean/2019_Covariates_Japan_Area.csv")
+
+# take away NA
+covariatesDF <- na.omit(huge)
+
+# select columns we need ( a single buoy)
+
+all_buoys_no_date <- covariatesDF %>% dplyr::select(PLATFORM_NUMBER, LONGITUDE, LATITUDE, TEMP_ADJUSTED, PRES_ADJUSTED )
+
+```
+
+
+```{r Regression of SST on Latitude and Longitude}
+
+# filter to between 10 and 30 dbars
+regVars <- varsNeeded %>% filter(PRES_ADJUSTED < 30 & PRES_ADJUSTED > 10) %>%
+           group_by(LONGITUDE,LATITUDE, PLATFORM_NUMBER) %>%
+           summarise(SURFACE_TEMP =mean(TEMP_ADJUSTED))
+
+# Regression temp on longitude
+
+myFit <- lm(meantemp ~ LONGITUDE , data= regVars)
+summary(myFit)
+
+regVars %>% ggplot(aes(x= LONGITUDE, y = meantemp))+
+  geom_point()+
+  geom_smooth(method = "lm") +
+  labs( x = "Longitude" , y = "Sea Surface Temperature (Degrees C)" ,
+        title = "Longitude and Ocean Surface Temperature")
+
+# regression temp on latitude
+
+myFit2 <- lm(meantemp ~ (LATITUDE) , data= regVars)
+summary(myFit2)
+
+regVars %>% ggplot(aes(x= LATITUDE, y = meantemp))+
+  geom_point()+
+  geom_smooth(method = "lm") +
+  labs( x = "Latitude" , y = "Sea Surface Temperature (Degrees C)" ,
+        title = "Latitude and Ocean Surface Temperature")
+
+
+```
+
+
+
+
+
+
+```{r Surface Temperature and Thermocline Depth for Buoy/Location}
+
+## Useful buoys -- Deep enough to use the variable representative isotherm 
+## formula (> 400 meters) and should also have surface temperature values.
+## 
+## For the variable isotherm formula, the equation is as follows:
+## 
+##  TT = T(MLD) – 0.25[T(MLD) – T(400m)]
+##
+## TT -- Thermocline Temperature
+## T(MLD) -- Temperature at the base of the mixed layer
+## T(400m) -- Temperature at 400 meters
+## 
+## For T(MLD), we use surface temperature minus 0.8.
+##
+## See Fiedler 2010, pg. 319, for more details. Link below:
+## https://aslopubs.onlinelibrary.wiley.com/doi/pdfdirect/10.4319/lom.2010.8.313
+## 
+
+
+deepBuoys <- all_buoys_no_date %>% filter(PRES_ADJUSTED > 400 & TEMP_ADJUSTED < 35) %>%
+               group_by(PLATFORM_NUMBER , LONGITUDE , LATITUDE) %>%
+               summarise( TEMP_DEEP = max(TEMP_ADJUSTED ) )
+
+surfaceBuoys <- all_buoys_no_date %>% filter(PRES_ADJUSTED < 30 & PRES_ADJUSTED > 10) %>%
+                group_by(PLATFORM_NUMBER , LONGITUDE , LATITUDE) %>%
+                summarise( SURFACE_TEMP = mean(TEMP_ADJUSTED) )
+
+usefulBuoys <- inner_join( deepBuoys , surfaceBuoys )
+
+usefulBuoys$TEMP_MLD <- usefulBuoys$SURFACE_TEMP - 0.8
+
+usefulBuoys$TEMP_THERMOCLINE <- usefulBuoys$TEMP_MLD - 0.25 * ( usefulBuoys$TEMP_MLD -
+                                  usefulBuoys$TEMP_DEEP )
+
+usefulBuoys$THERMOCLINE_DEPTH <- NA
+
+
+## This for() loop adds the THERMOCLINE_DEPTH to each entry using the value
+## immediately below the thermocline level.
+##
+## ~ 1-2% of the data is quite strange here: It's having trouble locating thermoclines
+## for those particular buoys. Should investigate further.
+##
+## Also, this code is slow as f#@%, even though it runs.
+for(i in 1:nrow(usefulBuoys)){
+  single_working_buoy <- all_buoys_no_date %>%
+                         filter( PLATFORM_NUMBER == usefulBuoys$PLATFORM_NUMBER[i] &
+                                 LONGITUDE == usefulBuoys$LONGITUDE[i] &
+                                 LATITUDE == usefulBuoys$LATITUDE[i] )
+  
+  dist_to_thermocline <- abs( single_working_buoy$TEMP_ADJUSTED - usefulBuoys$TEMP_THERMOCLINE[i] )
+  temp_sorting_value <- sort( dist_to_thermocline )[3]
+  
+  rows_near_therm <- single_working_buoy[ dist_to_thermocline < temp_sorting_value , ]
+  
+  usefulBuoys$THERMOCLINE_DEPTH[i] <- min( rows_near_therm$PRES_ADJUSTED )
+  
+}
+
+
+## Here is a group of weird buoys that don't fit or seem to have thermoclines. 
+## They make up about ~1.5% of total data.
+weirdBuoys <- usefulBuoys[ usefulBuoys$THERMOCLINE_DEPTH > 400 , ]
+
+## Use this code to look at single dive
+test_buoy <- all_buoys_no_date %>% filter( PLATFORM_NUMBER == 2901707 &
+                              LONGITUDE == 132.934 &
+                              LATITUDE == 40.603 )
+
+test_buoy %>% ggplot( aes( x=PRES_ADJUSTED , y=TEMP_ADJUSTED ) ) + geom_point()+ geom_vline(xintercept = 724)
+
+
+
+
+usefulBuoys
+```
+
+
+
+
+```{r Couple more Regressions Using Thermocline Info}
+
+regressionBuoys <- usefulBuoys[ usefulBuoys$THERMOCLINE_DEPTH < 400 , ]
+
+# Regression thermocline depth on longitude
+
+myFit <- lm(THERMOCLINE_DEPTH ~ LONGITUDE , data=regressionBuoys )
+summary(myFit)
+
+regressionBuoys %>% ggplot(aes(x= LONGITUDE, y = THERMOCLINE_DEPTH))+
+  geom_point()+
+  geom_smooth(method = "lm") +
+  labs( x = "Longitude" , y = "Thermocline Depth (meters)" ,
+        title = "Longitude and Thermocline Depth")
+
+
+# Regression thermocline depth on latitude
+
+myFit <- lm(THERMOCLINE_DEPTH ~ LATITUDE , data=regressionBuoys)
+summary(myFit)
+
+regressionBuoys %>% ggplot(aes(x= LATITUDE, y = THERMOCLINE_DEPTH))+
+  geom_point()+
+  geom_smooth(method = "lm") +
+  labs( x = "Latitude" , y = "Thermocline Depth (meters)" ,
+        title = "Latitude and Thermocline Depth")
+
+
+# Regression thermocline temperature on latitude
+
+myFit <- lm(TEMP_THERMOCLINE ~ LATITUDE , data=regressionBuoys)
+summary(myFit)
+
+regressionBuoys %>% ggplot(aes(x= LATITUDE, y = TEMP_THERMOCLINE))+
+  geom_point()+
+  geom_smooth(method = "lm") +
+  labs( x = "Latitude" , y = "Thermocline Temperature (degrees C)" ,
+        title = "Latitude and Thermocline Temperature")
+
+# Regression temperature of thermocline and thermocline depth
+
+myFit <- lm(TEMP_THERMOCLINE ~ THERMOCLINE_DEPTH , data=regressionBuoys)
+summary(myFit)
+
+regressionBuoys %>% ggplot(aes(x= THERMOCLINE_DEPTH, y = TEMP_THERMOCLINE)) +
+  geom_point()+
+  geom_smooth(method = "lm") +
+  labs( x = "Thermocline Depth (meters)" , y = "Thermocline Temperature (degrees C)" ,
+        title = "Thermocline Depth and Thermocline Temperature")
+
+# Regression thermocline depth and surface temperature
+
+myFit <- lm(THERMOCLINE_DEPTH ~ SURFACE_TEMP , data=regressionBuoys)
+summary(myFit)
+
+regressionBuoys %>% ggplot(aes(x= SURFACE_TEMP, y = THERMOCLINE_DEPTH)) +
+  geom_point()+
+  geom_smooth(method = "lm") +
+  labs( x = "Surface Temperature (Degrees C)" , y = "Thermocline Depth (meters)" ,
+        title = "Thermocline Depth and Sea Surface Temperature")
+
+
+
+```
+
+```{r HEAT MAP}
+library(ggmap)
+library(RColorBrewer)
+world <- get_map(location=c(left = 120, right = 180, bottom = 0, top = 60), source="osm", color="bw", crop=FALSE)
+
+heatmapdat <- regressionBuoys %>% ungroup() %>%  select(LONGITUDE,LATITUDE, SURFACE_TEMP) 
+
+
+
+
+ggmap(world) +
+    stat_summary_2d(data = heatmapdat, aes(x = LONGITUDE, y = LATITUDE, 
+        z = SURFACE_TEMP), fun = mean, alpha = 0.6, bins = 30) +
+    scale_fill_continuous(name = "Surface Temp", low = "cyan1", high = "indianred1")+
+  geom_point(data= heatmapdat[sample(1:nrow(heatmapdat),100,replace =FALSE),],aes(x = LONGITUDE, y = LATITUDE, alpha = 0.3))
+```
+
+
+```{r IMPORT TYPHOON DATA}
+
+typh <- read_csv("../typhoon_data/bwp_2019/2019_typh_data.csv")
+
+typh$yr_cyc_num <- gsub(pattern = ",",replacement = "",x = typh$yr_cyc_num)
+typh$mslp <- as.numeric(gsub(pattern = ",",replacement = "",x = typh$mslp))
+
+# NEED TO REPLACE with NEGATIVE SIGNS FOR W/S
+
+typh$lat <- as.numeric(gsub(pattern = "(N,|S,)",replacement = "",x = typh$lat))/10
+typh$long <- as.integer(gsub(pattern = "(E,|W,)",replacement = "",x = typh$long))/10
+
+
+typh
+```
+
+```{r HEAT MAP TYPHOON}
+ggmap(world) +
+    stat_summary_2d(data = heatmapdat, aes(x = LONGITUDE, y = LATITUDE, 
+        z = SURFACE_TEMP), fun = mean, alpha = 0.6, bins = 30) +
+    scale_fill_continuous(name = "Surface Temp", low = "cyan1", high = "indianred1")+
+  geom_point(data= typh,aes(x = long, y = lat, alpha = 0.3,colour=yr_cyc_num, stroke = 0))+theme(legend.position="none") 
+```
+
+
+
+
+
+```{r}
+binned <- regressionBuoys %>% mutate(bins = case_when(
+  SURFACE_TEMP > 5 & SURFACE_TEMP < 17 ~ "lowtemp",
+  SURFACE_TEMP > 23 & SURFACE_TEMP < 27 ~ "hightemp"
+)) 
+
+binned  %>% filter(!is.na(bins)) %>%  ggplot(aes(x=LATITUDE,y=SURFACE_TEMP, colour = bins))+
+  geom_point()+
+  geom_smooth(method="lm")
+
+# now with thermocline depth but binned Surface temp
+
+binned  %>% filter(!is.na(bins)) %>%  ggplot(aes(x=LATITUDE,y=THERMOCLINE_DEPTH, colour = bins))+
+  geom_point()+
+  geom_smooth(method="lm")
+
+# thermocline depth and surface temp with binned surface temp
+
+binned  %>% filter(!is.na(bins)) %>%  ggplot(aes(x=SURFACE_TEMP,y=THERMOCLINE_DEPTH, colour = bins))+
+  geom_point()+
+  geom_smooth(method="lm")+
+  geom_hline(yintercept = c(37.08,57.89))
+
+
+
+
+
+myFit <- lm(THERMOCLINE_DEPTH ~ LATITUDE , data=bin1)
+summary(myFit)
+
+bin1 %>% ggplot(aes(x= LATITUDE, y = THERMOCLINE_DEPTH))+
+  geom_point()+
+  geom_smooth(method = "lm") +
+  labs( x = "Latitude" , y = "Thermocline Depth (meters)" ,
+        title = "Latitude and Thermocline Depth")
+
+
+t <- binned %>% filter(bins == "hightemp") %>% pull(THERMOCLINE_DEPTH)
+
+hist(t)
+```
+
+
+
+
+

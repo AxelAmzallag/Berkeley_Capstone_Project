@@ -1,0 +1,361 @@
+---
+title: "Final Data Analysis"
+author: "BESTARGOSproject"
+date: "4/23/2021"
+output: html_document
+---
+
+```{r Loading Libraries , echo=FALSE , message=FALSE , eval=TRUE}
+library(ggplot2) # plotting
+library(magrittr) # pipes
+library(lubridate) # data manipulation
+library(dplyr) # data frame cleaning
+library(lobstr) # object size
+library(data.table) # data frame manipulation
+library(pastecs) # space time ecological time series
+library(mgcv) # generalized additive models
+library(gamm4) # mixed model gams with lme4 fitting
+library(ggmap) # heat map
+library(RColorBrewer) # heat map
+
+
+source("./getThermDepth.R")
+```
+
+
+```{r Import typhoon}
+
+# import typhoon data
+# get multiple years only use August
+
+typh16 <- readr::read_csv("../../bestARGOsProject/typhoon_data/bwp_2016/bwp_2016_typh_data.csv")
+typh17 <- readr::read_csv("../../bestARGOsProject/typhoon_data/bwp_2017/bwp_2017_typh_data.csv")
+typh18<- readr::read_csv("../../bestARGOsProject/typhoon_data/bwp_2018/bwp_2018_typh_data.csv")
+typh19 <- readr::read_csv("../../bestARGOsProject/typhoon_data/bwp_2019/bwp_2019_typh_data.csv")
+
+typh <- rbind(typh16,typh17,typh18,typh19)
+
+
+
+typh
+
+ms <- c("jan", "feb", "mar", "apr", "may", "jun","jul","aug","sep","oct","nov",
+        "dec")
+
+btyph <- typh %>%
+  mutate(month = lubridate::month(lubridate::ymd_h(date_time))) %>% 
+  mutate(month = ms[month]) %>% mutate(month = as.factor(month)) %>% 
+  mutate(year = lubridate::year(lubridate::ymd_h(date_time))) %>% 
+  group_by(yr_cyc_num,year) %>%
+  arrange(date_time,.by_group = TRUE) %>%
+  filter(row_number()==c(1:3)) %>% 
+  filter(lat <= 40 & lat >= 0 & long <= 180 & long >= 120) 
+  
+
+btyph <- btyph %>% filter(month == "aug")
+
+
+
+```
+
+
+
+
+```{r Simple GAM , message=FALSE, cache = TRUE}
+# get file names
+files <- fs::dir_ls(path = "../../august/")[1:3]
+
+# read in all the files 
+
+multipleaug <- 
+  do.call(rbind,
+          lapply(files, read.csv))
+
+# remove NA
+fulldata <- na.omit(multipleaug)
+
+# select columns we need
+colsneed <- fulldata %>% dplyr::select(PLATFORM_NUMBER,
+                                          LONGITUDE,
+                                          LATITUDE,
+                                          TEMP_ADJUSTED,
+                                          PRES_ADJUSTED ,
+                                          PSAL_ADJUSTED)
+
+colsneed %<>% dplyr::filter(PRES_ADJUSTED > 15)
+
+# get thermocline depth vector and attach it 
+
+thermdepthaug <- getThermDepth(colsneed)
+
+# first we fit a model with just latitude and longitude
+
+fitThermDepth1 <- bam(formula = THERMOCLINE_DEPTH ~ s(LONGITUDE,LATITUDE),
+                      data = thermdepthaug)
+
+summary(fitThermDepth1)
+
+
+
+```
+
+
+
+```{r Binning and correlation therm depth with typhoons}
+# 1. Make the bins
+# 2. Put them in a list
+# 3. Count typhoons in each bin
+# 4. Thermocline depth in the centre (maybe mean would be better)
+
+# 120, 180
+# 0, 60
+
+
+# 1  2 and 4
+
+binwidth <- 5
+
+lat <- seq(from = 2.5, to = 37.5, by = binwidth)
+long <- seq(from = 122.5, to = 177.5, by =binwidth)
+
+
+grid <- expand.grid(long, lat)
+
+colnames(grid) <- c("LONGITUDE", "LATITUDE")
+
+predictgrid <- predict.bam(fitThermDepth1,newdata = grid)
+
+withpred <- cbind(grid,predictgrid)
+
+
+
+# 3.
+
+world <- get_map(location=c(left = 120, right = 180, bottom = 0, top = 60), 
+                 source="osm", color="bw", crop=TRUE)
+
+q2 <- ggmap(world) +
+    stat_summary_2d(data = withpred, aes(x = LONGITUDE, y = LATITUDE, 
+        z = predictgrid), fun = mean, alpha = 0.6, bins = 30) +
+    scale_fill_continuous(name = "Thermocline Depth", low = "cyan1",
+                          high = "indianred1") +
+  labs(title = "Thermocline Depth heat\n map as predicted\n by GAM")
+
+q2
+
+library(raster)
+
+
+btyph <- typh %>%
+  group_by(yr_cyc_num) %>%
+  arrange(date_time,.by_group = TRUE) %>%
+  filter(row_number()==c(1:3)) %>% 
+  filter(lat <= 40 & lat >= 0 & long <= 180 & long >= 120)
+
+
+
+final <- rep(0, 77)
+
+for (i in 1:dim(withpred)[1]){
+  lattrue <- (btyph$lat < withpred$LATITUDE[i] + binwidth/2) & (btyph$lat > withpred$LATITUDE[i] - binwidth/2)
+  longtrue <- (btyph$long < withpred$LONGITUDE[i] + binwidth/2) & (btyph$long > withpred$LONGITUDE[i] - binwidth/2)
+  bothtrue <- lattrue & longtrue
+  final[i] <- sum(bothtrue)
+}
+
+withtyph <- cbind(withpred,typhcount = final)
+
+
+summary(lm(withtyph$typhcount~withtyph$predictgrid))
+
+
+
+withtyph %>% ggplot(aes(x=predictgrid, y= typhcount))+
+  geom_point()+
+  geom_smooth(method = "lm")
+```
+
+Try to do salinity and do the same thing
+
+```{r binning but with salinity and typhoons}
+
+# THIS IS THE SAME CODE AS ABOVE BUT FOR SURFACE SALINITY
+# in order to compare to thermocline depth
+
+fitsal <- bam(formula = SURFACE_SAL ~ s(LONGITUDE,LATITUDE),
+                      data = thermdepthaug)
+
+
+# 1  2 and 4
+
+binwidth <- 5
+
+lat <- seq(from = 2.5, to = 37.5, by = binwidth)
+long <- seq(from = 122.5, to = 177.5, by =binwidth)
+
+
+grid <- expand.grid(long, lat)
+
+colnames(grid) <- c("LONGITUDE", "LATITUDE")
+
+predictgrid <- predict.bam(fitsal,newdata = grid)
+
+withpred <- cbind(grid,predictgrid)
+withpred
+
+
+
+# 3.
+
+btyph <- typh %>%
+  group_by(yr_cyc_num) %>%
+  arrange(date_time,.by_group = TRUE) %>%
+  filter(row_number()==c(1:3)) %>% 
+  filter(lat <= 40 & lat >= 0 & long <= 180 & long >= 120)
+
+
+
+
+final <- rep(0, 77)
+
+for (i in 1:dim(withpred)[1]){
+  lattrue <- (btyph$lat < withpred$LATITUDE[i] + binwidth/2) & (btyph$lat > withpred$LATITUDE[i] - binwidth/2)
+  longtrue <- (btyph$long < withpred$LONGITUDE[i] + binwidth/2) & (btyph$long > withpred$LONGITUDE[i] - binwidth/2)
+  bothtrue <- lattrue & longtrue
+  final[i] <- sum(bothtrue)
+}
+
+withtyph <- cbind(withpred,typhcount = final)
+
+summary(lm(withtyph$typhcount~withtyph$predictgrid))
+
+withtyph %>% ggplot(aes(x=predictgrid, y= typhcount))+
+  geom_point()+
+  geom_smooth(method = "lm")
+```
+
+
+
+```{r Tims binning code}
+library(raster)
+
+binwidth <- 5
+
+lat <- seq(from = 0, to = 40, by = binwidth)
+long <- seq(from = 120, to = 180, by = binwidth)
+long_min <- 120
+long_max <- 180
+lat_min <- 0
+lat_max <- 40
+
+
+# change to lons and lats we want to count
+lon_typh <- btyph$long
+lat_typh <- btyph$lat
+pos <- data.frame(lon_typh, lat_typh)
+head(pos)
+
+
+
+
+coor_grid_w_counts <- function(long_min, long_max, lat_min, lat_max,
+                               long_typh_seq, lat_typh_seq, binwidth=binwidth) {
+    r <- raster(xmn=long_min, xmx=long_max, ymn=lat_min, ymx=lat_max, res=binwidth)
+    pos <- data.frame(long_typh_seq, lat_typh_seq)
+    count_r <- rasterize(pos, r, fun="count")
+    count_r_points <- rasterToPoints(count_r)
+    counts_by_cell <- cbind(cell=cellFromXY(count_r,
+                                            count_r_points[,1:2]),
+                            value=count_r_points[,3])
+    grid_with_counts <- cbind(coordinates(r), counts=0)
+
+    colnames(grid_with_counts) <- c("LONGITUDE", "LATITUDE", "COUNTS")
+
+    grid_with_counts[counts_by_cell[, 1], 3] <- counts_by_cell[, 2]
+
+    return(grid_with_counts)
+    
+}
+
+binwidth <- 5
+
+lat <- seq(from = 2.5, to = 37.5, by = binwidth)
+long <- seq(from = 122.5, to = 177.5, by =binwidth)
+
+
+grid <- expand.grid(long, lat)
+
+colnames(grid) <- c("LONGITUDE", "LATITUDE")
+
+# REMEMBER TO SQUARE PREDICTIONS
+
+# YOU NEED TO GO GET thermDepthgam2 
+
+# load("./RData/tgam.RData")
+
+
+predictgrid <- (predict.bam(thermDepthgam4,newdata = cbind(grid,month = as.factor("aug"))))^2
+
+withpred <- cbind(grid,predictgrid)
+
+
+test_case <- coor_grid_w_counts(long_min=120, long_max=180, lat_min=0, lat_max=40,
+                                lon_typh, lat_typh, binwidth)
+
+test_case <- data.frame(test_case)
+
+withtyph <- inner_join(withpred,test_case,by = c("LONGITUDE","LATITUDE"))
+
+
+
+
+summary(lm(withtyph$COUNTS~withtyph$predictgrid))
+
+# Linear Regression
+
+withtyph %>% ggplot(aes(x=predictgrid, y= COUNTS))+
+  geom_point()+
+  labs(title = "Typhoon counts in August from 2016-2019 and thermocline depth",
+         x= "Thermocline Depth", y= "Count of typhoon in grid") +
+  geom_smooth(method = "lm")
+
+linear_model <- lm(COUNTS~predictgrid , data=withtyph)
+
+summary(linear_model)
+
+# Run zero inflated negative binomial/ poisson but use the lat/long to predict the 
+# probability of not having a typhoon period. (p in logit model)
+
+library(pscl)
+
+
+
+
+
+# zero inflated poisson
+
+m1 <- zeroinfl(COUNTS ~ predictgrid | LATITUDE,
+  data = withtyph, dist = "poiss")
+
+# poisson glm
+m2 <- glm(COUNTS ~ predictgrid,
+               data = withtyph, family = "poisson")
+
+
+library(MASS)
+
+# neg binomial glm
+
+m3 <- glm.nb(COUNTS ~ predictgrid, data = withtyph)
+
+# zero inflated nb 
+
+m4 <- zeroinfl(COUNTS ~ predictgrid  | LATITUDE,
+  data = withtyph, dist = "negbin")
+
+
+
+
+
+```
+

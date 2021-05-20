@@ -1,0 +1,235 @@
+
+lat, long, juld, buoy number
+
+COVARIATES
+
+salinity, pressure
+
+
+
+```{r Combining Data Into Single Data Frame}
+
+library(dplyr)
+library(tidyr)
+library(ncdf4)
+
+# !! Use this file path with working directory /Data_Cleaning !! #
+nc <- nc_open("../Data_Pipeline/data/20210101_prof.nc",suppress_dimvals=TRUE)
+
+# Count number of attributes
+attributes(nc$var)$names
+
+# Key Values and Attributes: 1 observation per buoy
+buoy <- "PLATFORM_NUMBER"
+lon <- "LONGITUDE"
+lat <- "LATITUDE"
+tempqc <- "TEMP_ADJUSTED_QC" 
+presqc <-"PRES_ADJUSTED_QC" 
+salqc <- "PSAL_QC" 
+juld <- "JULD" 
+juldqc <- "JULD_QC"
+refdt <- "REFERENCE_DATE_TIME"
+
+
+# Covariates: Thousands of observations per buoy  
+temp <- "TEMP_ADJUSTED"
+pres <- "PRES_ADJUSTED"  
+sal <- "PSAL_ADJUSTED"
+
+# Making temperature pressure and salinity data frames
+temperature_df <- data.frame(ncvar_get(nc,temp)) 
+temperature_df <- pivot_longer(temperature_df, cols = colnames(temperature_df)) %>%
+                  rename(temp = value) %>% select(temp)
+
+pressure_df <- data.frame(ncvar_get(nc,pres))
+pressure_df <- pivot_longer(pressure_df, cols = colnames(pressure_df)) %>%
+               select(value) %>% rename(press = value)
+
+
+salinity_df <- data.frame(ncvar_get(nc,sal))
+salinity_df <- pivot_longer(salinity_df, cols = colnames(salinity_df)) %>%
+               select(value) %>% rename(salin = value)
+
+# Combining data frames
+covariate_df <- cbind(salinity_df,pressure_df,temperature_df) 
+
+nameanddate <- data.frame(bu = rep(ncvar_get(nc,buoy) ,
+                          dim(covariate_df)[1]/length(ncvar_get(nc,buoy))) ,
+                          date=rep(ncvar_get(nc,juld) ,
+                          dim(covariate_df)[1]/length(ncvar_get(nc,buoy))))
+
+covariate_df_final <- cbind(nameanddate,covariate_df)
+
+covariate_df_final
+
+```
+
+
+
+```{r Helper and Main Functions, message = F}
+library(furrr)
+library(future)
+library(tidyverse)
+
+
+# Helper function that pivots a data frame. The rows become observations
+# for a single covariate, which is the only column.
+
+cov_piv_long <- function(single_covariate, nc) {
+  pre_pivot <- data.frame(ncvar_get(nc, single_covariate))
+  pivoted_df <- pivot_longer(pre_pivot, cols  = colnames(pre_pivot)) %>%
+                select(value)
+  colnames(pivoted_df) <- single_covariate
+  return(pivoted_df)
+}
+
+
+# Takes in a single file name, key variables, and a vector of covariates
+# and returns a list of data frames.
+#
+# The outputted list contains the following:
+#     Element 1: Data frame with only the key variables. This data frame is
+#                relatively small, as it contains only 1 row per buoy.
+#   
+#     Element 2: Data frame with the observed data. All of the key variables from
+#                the first data frame are included with each observation. This
+#                data frame is much larger than the first one, as each buoy has
+#                many rows.
+#
+
+get_dfs <- function(fileName, key_vars = c("LONGITUDE", "LATITUDE", "JULD"), covs = NULL) {
+  # Make the first data frame: key variables filtered to desired region
+  nc <- nc_open(fileName)
+  key_vars_df <-
+    data.frame(purrr::map(.x = key_vars, ~ ncvar_get(nc, .x)))
+  colnames(key_vars_df) <- key_vars
+
+  key_vars_df <- key_vars_df %>% 
+    filter((LONGITUDE <= 180  ) & (LONGITUDE >= 90) &
+           (LATITUDE <= 75 ) & (LATITUDE >= 0 ))   
+  
+  # Make the second data frame: covariates and keys together in the
+  # same data frame
+  if (!is.null(covs)) {
+    keys_missing <-
+      purrr::map_dfc(.x = covs, .f = ~ cov_piv_long(.x, nc))
+    num_obs <- dim(keys_missing)[1]
+    num_buoys <- length(ncvar_get(nc, "PLATFORM_NUMBER"))
+    keys <-
+      data.frame(
+        PLATFORM_NUMBER = rep(ncvar_get(nc, "PLATFORM_NUMBER"),num_obs / num_buoys),
+        JULD = rep(ncvar_get(nc, "JULD"),num_obs / num_buoys))
+    
+    # Joining data frames for second output
+    covs_df <- cbind(keys, keys_missing)
+    covs_df <- dplyr::inner_join(key_vars_df, covs_df,
+                                 by=c("PLATFORM_NUMBER","JULD"))
+    nc_close(nc)
+    return(list(key_vars_df, covs_df))
+  } else{
+    nc_close(nc)
+    return(list(key_vars_df))
+  }
+}
+
+# Applies the funtion get_dfs to all files in vec_files and row binds them 
+# together. Output is a list similar in structure to get_dfs.
+
+get_multiple_dfs <- function(vec_files, key_vars, covs = NULL) {
+  combined_keys <-
+    purrr::map_dfr(.x = vec_files, ~ get_dfs(
+      fileName = .x,
+      key_vars = key_vars,
+      covs = covs
+    )[[1]])
+  
+  if (!is.null(covs)) {
+    combined_covs <-
+      purrr::map_dfr(.x = vec_files, ~ get_dfs(
+        fileName = .x,
+        key_vars = key_vars,
+        covs = covs
+      )[[2]])
+    return(list(combined_keys, combined_covs))
+  } else {
+    return(list(combined_keys))
+  }
+}
+
+
+```
+
+
+```{r Short Cleaning Loop for All Years}
+
+library(tidyverse)
+library(dplyr)
+library(tidyr)
+library(ncdf4)
+library(lobstr)
+
+## Pulls data from NetCDF Files from ARGO and puts them all into .csv files by
+## year, with 2 files for each year (Key Variables and Covariates)
+
+months <- c( "01" , "02" , "03" , "04" , "05" , "06" ,
+             "07" , "08" , "09" , "10" , "11" , "12" )
+
+days <- c( "01" , "02" , "03" , "04" , "05" , "06" , "07" , "08" , "09" , "10" ,
+           "11" , "12" , "13" , "14" , "15" , "16" , "17" , "18" , "19" , "20" ,
+           "21" , "22" , "23" , "24" , "25" , "26" , "27" , "28" , "29" , "30" , "31" )
+
+key_vars <-c("PLATFORM_NUMBER","LONGITUDE","LATITUDE","JULD","REFERENCE_DATE_TIME")
+covs <- c("TEMP_ADJUSTED","PRES_ADJUSTED","PSAL_ADJUSTED")
+
+## Code is probably inefficient but it ran and cleaned everything
+for( year in 2002:2021 ){
+  for( j in 1:length(months) ){
+    for( i in 1:length(days) ){
+      
+      file_name <- paste0( "../Data_Pipeline/data/" , year , 
+                           months[j] , days[i] , "_prof.nc" )
+      
+      if( file.exists(file_name) && exists("working_df") ){
+      
+        df_to_bind <- get_dfs( file_name , key_vars = key_vars , covs = covs)
+        
+        key_vars_to_csv <- rbind( key_vars_to_csv , df_to_bind[[1]] )
+        covariates_to_csv <- rbind( covariates_to_csv , df_to_bind[[2]] )
+      }
+      
+      else if( file.exists(file_name) && !exists("working_df") ){
+        
+        working_df <- get_dfs( file_name , key_vars = key_vars , covs = covs )
+        
+        key_vars_to_csv <- working_df[[1]]
+        covariates_to_csv <- working_df[[2]]
+      }
+      
+      else print( paste(file_name , "doesn't exist" , sep = " ") )
+    }
+  }
+  out_file_key_vars <- paste0( year , "_Key_Vars_Japan_Area.csv")
+  out_file_covariates <- paste0( year , "_Covariates_Japan_Area.csv")
+  
+  write.csv( key_vars_to_csv , out_file_key_vars , row.names = FALSE )
+  write.csv( covariates_to_csv , out_file_covariates , row.names = FALSE )
+  
+  rm( list = c("working_df" , "covariates_to_csv" , "key_vars_to_csv"))
+}
+
+
+
+
+```
+
+
+
+```{r Getting Dates}
+
+# This converts the universal dates to a more standard date format based on the 
+# origin date given by REFERENCE_DATE_TIME
+lubridate::as_date(dat$JULD,
+                   origin=lubridate::as_datetime(dat$REFERENCE_DATE_TIME))
+
+```
+
