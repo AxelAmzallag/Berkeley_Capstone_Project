@@ -4,11 +4,12 @@ This repository contains the code, presentations, and final report for a semeste
 
 ### Quick Reference
 
-The best way to quickly read about the project's process and findings is the _Final_Report.pdf_ file (https://github.com/AxelAmzallag/Berkeley_Capstone_Project/blob/main/Final_Report.pdf) in the main directory. The main analysis and conclusions are all described in some detail in this file. 
+The best way to read about the project's process and findings in an organized fashion is the _Final_Report.pdf_ file (https://github.com/AxelAmzallag/Berkeley_Capstone_Project/blob/main/Final_Report.pdf) in the main directory. The main analysis and conclusions are all described in some detail in this file. 
 
-A short PowerPoint summarizing the basics of the project is in the  findings can be found in the 
+A short, 15-slide PowerPoint summarizing the basics of the project is in the _Final_Presentation.pptx_ file. This cannot be viewed in a browser but can be downloaded if a speedy overview of the project is desired.
 
-### Directory Structure
+### Complete Directory Explanation
 
-The first directory is the 
+From the Main directory:
+- 
 
