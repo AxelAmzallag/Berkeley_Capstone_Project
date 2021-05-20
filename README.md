@@ -11,5 +11,5 @@ A short, 15-slide PowerPoint summarizing the basics of the project is in the _Fi
 ### Complete Directory Explanation
 
 From the Main directory
-- 
+- We are the champions, my friends
 
