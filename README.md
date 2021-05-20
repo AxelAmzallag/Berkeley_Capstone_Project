@@ -10,6 +10,11 @@ A short, 15-slide PowerPoint summarizing the basics of the project is in the _Fi
 
 ### Complete Directory Explanation
 
-From the Main directory
-- We are the champions, my friends
+From the Root directory of the repository:
+- Current_Data_Analysis: Contains all R files that created the outputs for the final PowerPoint presentation and the final report. These files WILL NOT RUN unless the cleaned buoy data is located on the local machine. Some of the plots used in the final presentation can be found in the Outputs sub-directory, and the saved version of the scattered t-distribution General Additive Model in the RData sub-directory.
+-  Data_Pipeline: Contains the cleaned and raw typhoon data, as well as the bash script used to download the ARGO data and the R script used to clean the ARGO data.
+-  Papers_Books_Manuals: Contains various research papers, textbooks, and user manuals collected throughout the project.
+-  Past_Data_Analysis: Contains all R files for the 1st (~1/3 of semester) and second (~2/3 of semester) presentations, as well as the PowerPoints and some outputs for those presentations. Most of these files were further updated and consolidated; their final versions are in the Current_Data_Analysis directory.
+-  Final_Presentation.pptx: The final PowerPoint presentation of the semester. Includes bullet points about the project from start to finish, with little detail.
+-  Final_Report.pdf: The final report submitted by Axel Amzallag. This file contains a detailed walk-through of the project methods, models, analysis, and conclusions.
 
