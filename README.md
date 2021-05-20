@@ -1,4 +1,4 @@
-# Capstone UC Berkeley Master's Program -- ARGO Buoy Data
+# UC Berkeley Master's Program -- ARGO Buoy Capstone
 
 ### Summary
 
