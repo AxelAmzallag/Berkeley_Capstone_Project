@@ -1,6 +1,8 @@
 # UC Berkeley Master's Program -- ARGO Buoy Capstone
 
-### Summary
+This project is an analysis of ocean data and typhoons conducted using the ARGO buoy data provided by the University of California, San Diego: https://argo.ucsd.edu/.
 
-The main findings of the research paper are located in the Final_Report.pdf file.
+### Quick Reference
+
+A walk-through of the process of the project and a high-level overview is located in the Final_Report.pdf file in the main directory. The main analysis and conclusions are also contained in this file.
 
