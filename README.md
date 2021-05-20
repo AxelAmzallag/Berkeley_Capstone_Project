@@ -8,7 +8,7 @@ The best way to read about the project's process and findings in an organized fa
 
 A short, 15-slide PowerPoint summarizing the basics of the project is in the **Final_Presentation.pptx** file. This cannot be viewed in a browser but can be downloaded if a speedy overview of the project is desired.
 
-### Complete Directory Explanation
+### Directory Reference
 
 From the Root directory of the repository:
 - **Current_Data_Analysis**: Contains all R files that created the outputs for the final PowerPoint presentation and the final report. These files WILL NOT RUN unless the cleaned buoy data is located on the local machine. Some of the plots used in the final presentation can be found in the Outputs sub-directory, and the saved version of the scattered t-distribution General Additive Model in the RData sub-directory.
